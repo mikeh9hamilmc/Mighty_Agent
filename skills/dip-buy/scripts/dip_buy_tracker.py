@@ -9,6 +9,7 @@ from ib_insync import *
 from datetime import datetime
 import json
 import os
+import argparse
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger('ib_insync.Decoder').setLevel(logging.CRITICAL)
@@ -52,7 +53,7 @@ def get_current_price():
     ticker = ib.reqTickers(contract)[0]
     return ticker.ask if ticker.ask else ticker.last
 
-def log_price_to_history(price):
+def log_price_to_history(price, silent=False):
     """Log current price to history file."""
     history_file = 'upro_history.csv'
     today = datetime.now().strftime('%Y-%m-%d')
@@ -88,7 +89,8 @@ def log_price_to_history(price):
     with open(history_file, 'w') as f:
         f.writelines(new_lines)
     
-    print(f"Logged price ${price:.2f} to history")
+    if not silent:
+        print(f"Logged price ${price:.2f} to history")
 
 def get_current_position():
     """Get current UPRO position."""
@@ -110,7 +112,7 @@ def execute_buy(shares, price):
     ib.sleep(2)
     return trade.orderStatus.status == 'Filled'
 
-def check_dip_buys():
+def check_dip_buys(silent=False):
     """Check if we should buy based on dip levels."""
     config = load_config()
     
@@ -133,12 +135,13 @@ def check_dip_buys():
     
     drop_pct = ((last_buy_price - current_price) / last_buy_price) * 100
     
-    print(f"\n=== UPRO Dip Buy Tracker ===")
-    print(f"Current Shares: {current_shares}")
-    print(f"Last Buy Price: ${last_buy_price:.2f}")
-    print(f"Current Price: ${current_price:.2f}")
-    print(f"Drop from Last Buy: {drop_pct:.1f}%")
-    print()
+    if not silent:
+        print(f"\n=== UPRO Dip Buy Tracker ===")
+        print(f"Current Shares: {current_shares}")
+        print(f"Last Buy Price: ${last_buy_price:.2f}")
+        print(f"Current Price: ${current_price:.2f}")
+        print(f"Drop from Last Buy: {drop_pct:.1f}%")
+        print()
     
     # Check each dip level
     for level in config['dip_levels']:
@@ -178,19 +181,25 @@ def check_dip_buys():
                     print(err_msg)
                 return
     
-    print("No buy signals triggered.")
+    if not silent:
+        print("No buy signals triggered.")
 
 def main():
     """Main function."""
+    parser = argparse.ArgumentParser(description='UPRO Dip Buy Tracker')
+    parser.add_argument('--silent', action='store_true', help='Only output when a buy is executed')
+    args = parser.parse_args()
+
     if not ib.isConnected():
         try:
             ib.connect('127.0.0.1', 4002, clientId=0)
         except Exception as e:
-            print(f"Connection failed: {e}")
+            if not args.silent:
+                print(f"Connection failed: {e}")
             return
     
     try:
-        check_dip_buys()
+        check_dip_buys(silent=args.silent)
     finally:
         ib.disconnect()
 
