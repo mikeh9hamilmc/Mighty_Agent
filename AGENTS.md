@@ -60,3 +60,15 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
     ```
 3.  Place your Python script(s) in `skills/my-skill/scripts/`. The executor will pick the first `.py` file it finds as the entry point.
 4.  Restart the agent to allow it to discover the new skill.
+
+## Change Log
+
+### 2026-05-06
+- **Deployment**: Created a comprehensive WSL installation package including `install.sh`, `requirements.txt`, and a systemd service template for easy deployment on remote Linux/WSL machines.
+- **Skill Addition - `dip-buy`**: Integrated the UPRO dip-buying strategy as a formal agent skill, moving scripts into the modular architecture.
+- **Skill Addition - `check-cash` & `check-upro`**: Added new skills for real-time monitoring of Interactive Brokers account cash balances and specific UPRO position status.
+- **Enhanced `dip_buy_tracker.py`**: 
+    - Fixed critical syntax errors and undefined variables in the core buying logic.
+    - Implemented a `--silent` CLI flag to allow for quiet cron job execution while still reporting successful trades.
+- **Repository Management**: Initialized local Git repository, configured user metadata (Michael Hamilton), and established the remote push to GitHub.
+- **Documentation**: Comprehensive update to `README.md` covering remote installation, environment activation, and automated service management.
