@@ -54,7 +54,7 @@ def get_current_price():
 
 def log_price_to_history(price):
     """Log current price to history file."""
-    history_file = '/home/mikeh9/ib_trading/upro_history.csv'
+    history_file = 'upro_history.csv'
     today = datetime.now().strftime('%Y-%m-%d')
     now = datetime.now().strftime('%H:%M:%S')
     
