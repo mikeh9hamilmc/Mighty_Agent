@@ -53,5 +53,13 @@ If you want the agent to run automatically in the background:
    sudo systemctl start mighty-agent
    ```
 
+## Manual Python Usage
+If you want to run Python scripts manually or install new packages into the environment, activate it using:
+```bash
+source venv/bin/activate
+# Now you can run pip or python directly
+deactivate
+```
+
 ## Skills
 The agent discovers skills dynamically from the `skills/` directory. Each skill is a folder containing a `SKILL.md` definition and a `scripts/` directory with a Python entry point.
