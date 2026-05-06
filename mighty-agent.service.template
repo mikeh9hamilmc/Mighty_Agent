@@ -1,0 +1,15 @@
+[Unit]
+Description=Mighty Agent - Telegram Python Executor
+After=network.target
+
+[Service]
+Type=simple
+User=${USER}
+WorkingDirectory=${PWD}
+ExecStart=$(which node) src/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
