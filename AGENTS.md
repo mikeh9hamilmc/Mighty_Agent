@@ -72,3 +72,6 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
     - Implemented a `--silent` CLI flag to allow for quiet cron job execution while still reporting successful trades.
 - **Repository Management**: Initialized local Git repository, configured user metadata (Michael Hamilton), and established the remote push to GitHub.
 - **Documentation**: Comprehensive update to `README.md` covering remote installation, environment activation, and automated service management.
+### 2026-05-07
+- **Skill Refinement - `check-cash`**: Removed "Buying Power" from the `check_cash.py` script output to simplify account monitoring as per user request.
+- **Skill Refinement - `check-upro`**: Enhanced the script to fetch and display the current UPRO price using `reqTickers`, including unrealized P&L calculation if a position exists.

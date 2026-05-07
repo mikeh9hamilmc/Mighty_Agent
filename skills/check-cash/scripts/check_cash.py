@@ -29,8 +29,6 @@ def check_account():
                 cash['cash'] = float(av.value)
             if av.tag == 'NetLiquidation' and av.currency == 'USD':
                 cash['net_liq'] = float(av.value)
-            if av.tag == 'BuyingPower' and av.currency == 'USD':
-                cash['buying_power'] = float(av.value)
         
         # Get positions
         positions = ib.positions()
@@ -49,9 +47,6 @@ def check_account():
         
         print(f"\nCash: ${cash_value:,.2f}")
         print(f"Net Liquidation: ${net_liq:,.2f}")
-        
-        if 'buying_power' in cash:
-            print(f"Buying Power: ${cash['buying_power']:,.2f}")
         
         if net_liq > 0:
             cash_pct = (cash_value / net_liq) * 100
