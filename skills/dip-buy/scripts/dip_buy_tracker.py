@@ -133,6 +133,7 @@ def check_dip_buys(silent=False):
     target_spend = config['target_spend']
     current_shares, _ = get_current_position()
     
+    price_vs_last = ((current_price - last_buy_price) / last_buy_price) * 100
     drop_pct = ((last_buy_price - current_price) / last_buy_price) * 100
     
     if not silent:
@@ -140,7 +141,7 @@ def check_dip_buys(silent=False):
         print(f"Current Shares: {current_shares}")
         print(f"Last Buy Price: ${last_buy_price:.2f}")
         print(f"Current Price: ${current_price:.2f}")
-        print(f"Drop from Last Buy: {drop_pct:.1f}%")
+        print(f"Current Price vs Last Buy Price: {price_vs_last:.1f}%")
         print()
     
     # Check each dip level
