@@ -28,7 +28,7 @@ function initScheduler(bot) {
   cron.schedule('0 4-20 * * 1-5', async () => {
     logger.info('Running scheduled task: Hourly Dip-Buy Check');
     try {
-      const { output } = await runSkill('dip-buy', ['--silent']);
+      const { output } = await runSkill('dip-buy'); //, ['--silent']
       if (output && output.trim().length > 0) {
         await bot.telegram.sendMessage(AUTHORIZED_USER_ID, output, { parse_mode: 'Markdown' });
         logger.info('Dip-buy skill output sent to user.');
