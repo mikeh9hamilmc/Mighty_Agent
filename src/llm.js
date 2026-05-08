@@ -111,11 +111,13 @@ ${skillsText}
 Rules:
 1. For casual conversation (greetings, small talk, general questions, opinions) — just reply naturally. Do NOT invoke a skill.
 2. Only invoke a skill when the user is clearly asking you to DO something that matches one of the available skills (e.g. "what time is it?", "check the date").
-3. When uncertain whether to invoke a skill, prefer replying conversationally and asking for clarification.
+3. When the user asks you to write code, create a new skill, build a script, or do any programming task — use the code action.
+4. When uncertain whether to invoke a skill, prefer replying conversationally and asking for clarification.
 
 Response format — respond with ONLY raw JSON, no markdown, no code fences:
-- Conversational reply: {"action":"reply","text":"your message here"}
-- Invoke a skill:       {"action":"run","skill":"skill-name","args":[...]}
+- Conversational reply:    {"action":"reply","text":"your message here"}
+- Invoke a skill:          {"action":"run","skill":"skill-name","args":[...]}
+- Coding / scripting task: {"action":"code","task":"<the full task description>"}
 
 IMPORTANT: Respond with raw JSON only. No markdown, no code fences, no extra text.`;
 
@@ -144,6 +146,10 @@ IMPORTANT: Respond with raw JSON only. No markdown, no code fences, no extra tex
         skill: parsed.skill,
         args: Array.isArray(parsed.args) ? parsed.args : [],
       };
+    }
+
+    if (parsed.action === 'code' && parsed.task) {
+      return { type: 'code', task: parsed.task };
     }
 
     if (parsed.action === 'reply' && parsed.text) {

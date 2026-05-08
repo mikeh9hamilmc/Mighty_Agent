@@ -4,6 +4,7 @@ const { Telegraf } = require('telegraf');
 const { TELEGRAM_TOKEN, AUTHORIZED_USER_ID } = require('./config');
 const { runSkill } = require('./executor');
 const { decideAction, SKILLS } = require('./llm');
+const { runCoderAgent } = require('./coder-agent');
 const logger = require('./logger');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
@@ -102,6 +103,25 @@ bot.on('text', async (ctx) => {
 
   if (decision.type === 'error') {
     await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, `❌ ${decision.text}`);
+    return;
+  }
+
+  // type === 'code' — delegate to Coder sub-agent
+  if (decision.type === 'code') {
+    await ctx.telegram.editMessageText(
+      ctx.chat.id, thinking.message_id, undefined,
+      '🧑‍💻 Consulting the Coder sub-agent (Claude Opus)... this may take a moment.'
+    );
+
+    const { summary, filesCreated } = await runCoderAgent(decision.task);
+
+    let result = summary;
+    if (filesCreated.length > 0) {
+      result += `\n\n📁 *Files created/updated:*\n${filesCreated.map(f => `\`${f}\``).join('\n')}`;
+      result += '\n\n⚠️ *Restart the agent to load any new skills.*';
+    }
+
+    await ctx.reply(result, { parse_mode: 'Markdown' });
     return;
   }
 

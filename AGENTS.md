@@ -23,6 +23,10 @@ The system is built as a modular Node.js application that bridges the gap betwee
     - **Robustness**: Implements a configurable execution timeout and forces UTF-8 encoding for cross-platform compatibility.
 - **`src/config.js`**: Centralized configuration and environment variable validation.
 - **`src/logger.js`**: Structured logging using `winston`, writing to both the console and `logs/agent.log`.
+- **`src/coder-agent.js`**: The **Coder sub-agent**. A local autonomous coding agent powered by Claude Opus (`claude-opus-4-7`).
+    - **Agentic Loop**: Runs up to 15 iterations, calling tools until the task is complete or no more tool calls are made.
+    - **Tools**: `write_file`, `read_file`, `list_files`, `execute_python` — all sandboxed to the `skills/` directory.
+    - **Skill Creation**: Can autonomously create new skills (SKILL.md + Python scripts), test them, and fix errors before reporting success.
 
 ## Workflow
 
@@ -80,3 +84,4 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 - **Fix - `scheduler`**: Reordered initialization in `index.js` to ensure the scheduler starts before the bot's blocking launch loop, resolving an issue where the morning greeting was not firing.
 - **Skill Addition - `good-morning`**: Created a new composite skill that combines a personalized morning greeting with real-time weather data by re-using the `weather` skill logic.
 - **Automation - `scheduler`**: Enhanced the scheduler to call the `good-morning` skill for daily greetings and added a weekday hourly automation for the `dip-buy` tracker.
+- **Sub-Agent Addition - `coder-agent`**: Implemented a local Coder sub-agent (`src/coder-agent.js`) using Claude Opus (`claude-opus-4-7`). The main agent now routes coding/scripting tasks to the Coder, which autonomously writes, tests, and fixes Python skill code using an agentic tool loop.
