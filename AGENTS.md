@@ -78,3 +78,5 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 
 ### 2026-05-08
 - **Fix - `scheduler`**: Reordered initialization in `index.js` to ensure the scheduler starts before the bot's blocking launch loop, resolving an issue where the morning greeting was not firing.
+- **Skill Addition - `good-morning`**: Created a new composite skill that combines a personalized morning greeting with real-time weather data by re-using the `weather` skill logic.
+- **Automation - `scheduler`**: Enhanced the scheduler to call the `good-morning` skill for daily greetings and added a weekday hourly automation for the `dip-buy` tracker.

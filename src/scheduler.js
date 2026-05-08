@@ -3,6 +3,7 @@
 const cron = require('node-cron');
 const { AUTHORIZED_USER_ID } = require('./config');
 const logger = require('./logger');
+const { runSkill } = require('./executor');
 
 /**
  * Initialize all scheduled tasks for the agent.
@@ -11,19 +12,33 @@ const logger = require('./logger');
 function initScheduler(bot) {
   logger.info('Initializing scheduler...');
 
-  // Task: Send "Good morning" every day at 9:00 AM
-  // Cron format: minute hour day-of-month month day-of-week
+  // Task: Send "Good morning" (using good-morning skill) every day at 9:00 AM
   cron.schedule('0 9 * * *', async () => {
     logger.info('Running scheduled task: Morning Greeting');
     try {
-      await bot.telegram.sendMessage(AUTHORIZED_USER_ID, '☀️ Good morning! I hope you have a great day. I am ready to help if you need anything.');
-      logger.info('Morning greeting sent successfully.');
+      const { output } = await runSkill('good-morning');
+      await bot.telegram.sendMessage(AUTHORIZED_USER_ID, output, { parse_mode: 'Markdown' });
+      logger.info('Morning greeting skill executed successfully.');
     } catch (err) {
-      logger.error(`Failed to send morning greeting: ${err.message}`);
+      logger.error(`Failed to execute morning greeting skill: ${err.message}`);
     }
   });
 
-  logger.info('Daily 9:00 AM greeting task scheduled.');
+  // Task: Run "dip-buy" every hour from 4:00 AM to 8:00 PM on weekdays
+  cron.schedule('0 4-20 * * 1-5', async () => {
+    logger.info('Running scheduled task: Hourly Dip-Buy Check');
+    try {
+      const { output } = await runSkill('dip-buy', ['--silent']);
+      if (output && output.trim().length > 0) {
+        await bot.telegram.sendMessage(AUTHORIZED_USER_ID, output, { parse_mode: 'Markdown' });
+        logger.info('Dip-buy skill output sent to user.');
+      }
+    } catch (err) {
+      logger.error(`Failed to execute dip-buy skill: ${err.message}`);
+    }
+  });
+
+  logger.info('Scheduled tasks initialized (9 AM Greeting, Hourly Weekday Dip-Buy).');
 }
 
 module.exports = { initScheduler };
