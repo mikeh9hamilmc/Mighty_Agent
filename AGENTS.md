@@ -75,3 +75,6 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 ### 2026-05-07
 - **Skill Refinement - `check-cash`**: Removed "Buying Power" from the `check_cash.py` script output to simplify account monitoring as per user request.
 - **Skill Refinement - `check-upro`**: Enhanced the script to fetch and display the current UPRO price using `reqTickers`, including unrealized P&L calculation if a position exists.
+
+### 2026-05-08
+- **Fix - `scheduler`**: Reordered initialization in `index.js` to ensure the scheduler starts before the bot's blocking launch loop, resolving an issue where the morning greeting was not firing.

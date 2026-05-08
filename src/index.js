@@ -17,8 +17,8 @@ async function main() {
     bot.stop('SIGTERM');
   });
 
-  await bot.launch();
   initScheduler(bot);
+  await bot.launch();
   logger.info('Bot is online and listening for messages.');
 }
 
