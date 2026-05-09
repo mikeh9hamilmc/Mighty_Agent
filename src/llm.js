@@ -113,11 +113,13 @@ Rules:
 2. Only invoke a skill when the user is clearly asking you to DO something that matches one of the available skills (e.g. "what time is it?", "check the date").
 3. When the user asks you to write code, create a new skill, build a script, or do any programming task — use the code action.
 4. When uncertain whether to invoke a skill, prefer replying conversationally and asking for clarification.
+5. When the user asks anything related to law, legal documents, statutes, court cases, criminal charges, divorce, custody, marriage, property disputes, lawsuits, attorneys, or anything that sounds like a legal question — use the legal action.
 
 Response format — respond with ONLY raw JSON, no markdown, no code fences:
 - Conversational reply:    {"action":"reply","text":"your message here"}
 - Invoke a skill:          {"action":"run","skill":"skill-name","args":[...]}
 - Coding / scripting task: {"action":"code","task":"<the full task description>"}
+- Legal question or task:  {"action":"legal","task":"<the full user question>"}
 
 IMPORTANT: Respond with raw JSON only. No markdown, no code fences, no extra text.`;
 
@@ -150,6 +152,10 @@ IMPORTANT: Respond with raw JSON only. No markdown, no code fences, no extra tex
 
     if (parsed.action === 'code' && parsed.task) {
       return { type: 'code', task: parsed.task };
+    }
+
+    if (parsed.action === 'legal' && parsed.task) {
+      return { type: 'legal', task: parsed.task };
     }
 
     if (parsed.action === 'reply' && parsed.text) {

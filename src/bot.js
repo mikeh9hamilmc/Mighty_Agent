@@ -5,6 +5,7 @@ const { TELEGRAM_TOKEN, AUTHORIZED_USER_ID } = require('./config');
 const { runSkill } = require('./executor');
 const { decideAction, SKILLS } = require('./llm');
 const { runCoderAgent } = require('./coder-agent');
+const { runLegalAgent } = require('./legal-agent');
 const logger = require('./logger');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
@@ -87,10 +88,86 @@ bot.command('status', async (ctx) => {
   );
 });
 
-// ─── Natural Language → LLM → Skill ─────────────────────────────────────────
+// ─── Natural Language → LLM → Skill ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+/**
+ * Stream a Legal agent response back to Telegram.
+ * Edits the initial "thinking" message with accumulating text every 800ms.
+ */
+async function streamLegalResponse(ctx, thinkingMsgId, question) {
+  let accumulated = '';
+  let lastEdit    = Date.now();
+  const EDIT_INTERVAL_MS = 800;
+
+  // Streaming edit loop
+  const editIfDue = async () => {
+    const now = Date.now();
+    if (now - lastEdit >= EDIT_INTERVAL_MS && accumulated.length > 0) {
+      try {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id, thinkingMsgId, undefined,
+          accumulated.slice(0, 4000), // Telegram limit
+          { parse_mode: 'Markdown' }
+        );
+      } catch (_) { /* ignore race conditions on rapid edits */ }
+      lastEdit = now;
+    }
+  };
+
+  const interval = setInterval(editIfDue, EDIT_INTERVAL_MS);
+
+  let sources = [];
+  try {
+    const result = await runLegalAgent(question, (chunk) => {
+      accumulated += chunk;
+    });
+    sources = result.sources || [];
+  } finally {
+    clearInterval(interval);
+  }
+
+  // Final edit with full answer
+  const finalText = accumulated.slice(0, 4000) || '_No response._';
+  try {
+    await ctx.telegram.editMessageText(
+      ctx.chat.id, thinkingMsgId, undefined,
+      finalText,
+      { parse_mode: 'Markdown' }
+    );
+  } catch (_) { /* message may already be up to date */ }
+
+  // If there are document sources, send a follow-up message
+  if (sources.length > 0) {
+    const srcText = sources
+      .slice(0, 5)
+      .map(s => `• ${s.length > 80 ? s.slice(0, 77) + '...' : s}`)
+      .join('\n');
+    await ctx.reply(`📚 *Sources used:*\n${srcText}`, { parse_mode: 'Markdown' });
+  }
+}
+
 bot.on('text', async (ctx) => {
-  const userMessage = ctx.message.text;
-  logger.info(`Message from ${ctx.from.id}: ${userMessage}`);
+  const rawMessage = ctx.message.text;
+  logger.info(`Message from ${ctx.from.id}: ${rawMessage}`);
+
+  // ── "ask <agent>" prefix routing ──────────────────────────────────────────
+  // Supports: "ask legal ...", "ask medical ...", etc.
+  const askMatch = rawMessage.match(/^ask\s+(\w+)[:\s]+(.+)/is);
+  if (askMatch) {
+    const agentName = askMatch[1].toLowerCase();
+    const question  = askMatch[2].trim();
+
+    if (agentName === 'legal') {
+      const thinking = await ctx.reply('⚖️ Legal is thinking...');
+      await streamLegalResponse(ctx, thinking.message_id, question);
+      return;
+    }
+
+    // Future agents: 'medical', 'financial', etc.
+    // For now, fall through to normal LLM routing
+  }
+
+  const userMessage = rawMessage;
 
   const thinking = await ctx.reply('🤔 Thinking...');
 
@@ -122,6 +199,16 @@ bot.on('text', async (ctx) => {
     }
 
     await ctx.reply(result, { parse_mode: 'Markdown' });
+    return;
+  }
+
+  // type === 'legal' — delegate to Legal sub-agent
+  if (decision.type === 'legal') {
+    await ctx.telegram.editMessageText(
+      ctx.chat.id, thinking.message_id, undefined,
+      '⚖️ Legal is thinking...'
+    );
+    await streamLegalResponse(ctx, thinking.message_id, decision.task);
     return;
   }
 

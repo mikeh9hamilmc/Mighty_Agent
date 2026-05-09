@@ -67,6 +67,15 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 
 ## Change Log
 
+### 2026-05-09
+- **Sub-Agent Addition - `legal-agent`**: Implemented a Legal sub-agent (`src/legal-agent.js`) powered by Claude Sonnet with expertise in Florida (Pinellas County) criminal, civil, and family law, and Texas Family Code §2.401 (informal marriage) and partition lawsuits.
+- **RAG Engine Addition - `rag-engine`**: Created `src/rag-engine.js` — a full Retrieval-Augmented Generation engine that parses PDF, DOCX, XLSX, TXT, and MD files from `skills/legal/data/`, chunks them, embeds them using Voyage AI's `voyage-law-2` legal-specific model, and persists the index to `.rag-index.json` for fast restarts. Only re-embeds new or changed files.
+- **Brave Search Integration**: Legal sub-agent uses the Brave Search API as a web-search fallback when the user's documents don't contain sufficient context.
+- **Streaming Responses**: Legal answers are streamed back to Telegram via periodic message edits every 800ms, giving a live typing-indicator effect.
+- **`ask <agent>` Routing**: Added prefix-based direct routing to sub-agents in `bot.js` (e.g., `"ask legal ..."`). LLM router also auto-detects legal intent for natural language queries.
+- **New API Keys**: Added `VOYAGE_API_KEY` and `BRAVE_API_KEY` to config and `.env.example`.
+- **Skill Addition - `legal`**: Created `skills/legal/SKILL.md` so the legal sub-agent is discoverable by the main LLM router.
+
 ### 2026-05-06
 - **Deployment**: Created a comprehensive WSL installation package including `install.sh`, `requirements.txt`, and a systemd service template for easy deployment on remote Linux/WSL machines.
 - **Skill Addition - `dip-buy`**: Integrated the UPRO dip-buying strategy as a formal agent skill, moving scripts into the modular architecture.
