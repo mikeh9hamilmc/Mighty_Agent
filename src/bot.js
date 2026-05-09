@@ -129,24 +129,42 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
     clearInterval(interval);
   }
 
-  // Final edit with full answer
-  const finalText = accumulated.slice(0, 4000) || '_No response._';
+  // Final edit with full answer (split if over Telegram's 4096 limit)
+  const messageChunks = [];
+  for (let i = 0; i < accumulated.length; i += 4000) {
+    messageChunks.push(accumulated.slice(i, i + 4000));
+  }
+  if (messageChunks.length === 0) messageChunks.push('_No response._');
+
+  // 1. Update the original thinking message with the first chunk
   try {
     await ctx.telegram.editMessageText(
       ctx.chat.id, thinkingMsgId, undefined,
-      finalText,
+      messageChunks[0],
       { parse_mode: 'Markdown' }
     );
   } catch (err) {
-    logger.warn(`[Legal] Telegram Markdown error on final edit: ${err.message}. Retrying as plain text.`);
+    if (!err.message.includes('message is not modified')) {
+      logger.warn(`[Legal] Telegram Markdown error on final edit: ${err.message}. Retrying as plain text.`);
+      try {
+        await ctx.telegram.editMessageText(ctx.chat.id, thinkingMsgId, undefined, messageChunks[0]);
+      } catch (fallbackErr) {
+        logger.error(`[Legal] Final edit fallback also failed: ${fallbackErr.message}`);
+      }
+    }
+  }
+
+  // 2. Send any remaining chunks as new messages
+  for (let i = 1; i < messageChunks.length; i++) {
     try {
-      // Fallback: send without markdown if Telegram's strict parser rejected it
-      await ctx.telegram.editMessageText(
-        ctx.chat.id, thinkingMsgId, undefined,
-        finalText
-      );
-    } catch (fallbackErr) {
-      logger.error(`[Legal] Final edit fallback also failed: ${fallbackErr.message}`);
+      await ctx.reply(messageChunks[i], { parse_mode: 'Markdown' });
+    } catch (err) {
+      logger.warn(`[Legal] Telegram Markdown error on follow-up chunk: ${err.message}. Retrying as plain text.`);
+      try {
+        await ctx.reply(messageChunks[i]);
+      } catch (fallbackErr) {
+        logger.error(`[Legal] Follow-up chunk fallback also failed: ${fallbackErr.message}`);
+      }
     }
   }
 
