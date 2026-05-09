@@ -2,3 +2,9 @@ node_modules/
 .env
 logs/
 *.log
+
+# Legal sub-agent — ignore all documents and the generated RAG index
+# Only README.md is tracked so the folder exists in the repo
+skills/legal/data/*
+!skills/legal/data/README.md
+skills/legal/data/.rag-index.json
