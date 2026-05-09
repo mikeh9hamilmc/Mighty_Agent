@@ -83,9 +83,20 @@ async function extractText(filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
   if (ext === '.pdf') {
-    let pdfParse = require('pdf-parse');
-    // Handle both default export styles (CommonJS vs ESM interop)
-    if (typeof pdfParse !== 'function' && pdfParse.default) pdfParse = pdfParse.default;
+    // pdf-parse has inconsistent export shapes across environments —
+    // try every known shape before giving up.
+    const pdfParseModule = require('pdf-parse');
+    const pdfParse =
+      typeof pdfParseModule === 'function'             ? pdfParseModule :
+      typeof pdfParseModule.default === 'function'     ? pdfParseModule.default :
+      typeof pdfParseModule.pdfParse === 'function'    ? pdfParseModule.pdfParse :
+      // Fall back to the internal path directly
+      require('pdf-parse/lib/pdf-parse.js');
+
+    logger.info(`[RAG] pdf-parse resolved: ${typeof pdfParse}`);
+    if (typeof pdfParse !== 'function') {
+      throw new Error(`pdf-parse did not export a function. Got type: ${typeof pdfParseModule}, keys: ${Object.keys(pdfParseModule).join(', ')}`);
+    }
     const buf = fs.readFileSync(filePath);
     const data = await pdfParse(buf);
     return data.text;
