@@ -85,36 +85,45 @@ async function extractText(filePath) {
   if (ext === '.pdf') {
     const pdfParseModule = require('pdf-parse');
 
-    // Log exact module shape so we can diagnose cross-platform export differences
     const moduleType = typeof pdfParseModule;
     const moduleKeys = moduleType === 'object' && pdfParseModule ? Object.keys(pdfParseModule) : [];
     logger.info(`[RAG] pdf-parse module: type=${moduleType}, keys=[${moduleKeys.join(',')}]`);
 
-    // Try every known export shape, then scan all values for a function
-    let pdfParse =
-      typeof pdfParseModule === 'function'             ? pdfParseModule :
-      typeof pdfParseModule.default === 'function'     ? pdfParseModule.default :
-      typeof pdfParseModule.pdfParse === 'function'    ? pdfParseModule.pdfParse :
-      moduleKeys.length > 0
-        ? Object.values(pdfParseModule).find(v => typeof v === 'function')
-        : null;
+    const buf = fs.readFileSync(filePath);
 
-    // Last resort: internal lib path (blocked on strict exports-map envs)
-    if (!pdfParse) {
-      try {
-        pdfParse = require('pdf-parse/lib/pdf-parse.js');
-      } catch (innerErr) {
-        throw new Error(
-          `pdf-parse function not found. type=${moduleType}, keys=[${moduleKeys.join(',')}]. ` +
-          `Internal path blocked: ${innerErr.message}`
-        );
-      }
+    // ── pdf-parse v1 (exports a plain async function) ──────────────────────
+    if (typeof pdfParseModule === 'function') {
+      const data = await pdfParseModule(buf);
+      return data.text;
+    }
+    if (typeof pdfParseModule.default === 'function') {
+      const data = await pdfParseModule.default(buf);
+      return data.text;
     }
 
-    logger.info(`[RAG] pdf-parse function resolved: ${typeof pdfParse}`);
-    const buf = fs.readFileSync(filePath);
-    const data = await pdfParse(buf);
-    return data.text;
+    // ── pdf-parse v2 (exports a PDFParse class) ────────────────────────────
+    if (typeof pdfParseModule.PDFParse === 'function') {
+      const PDFParse = pdfParseModule.PDFParse;
+      const parser   = new PDFParse();
+      const methods  = Object.getOwnPropertyNames(Object.getPrototypeOf(parser))
+                             .filter(m => m !== 'constructor');
+      logger.info(`[RAG] pdf-parse v2 PDFParse methods: [${methods.join(',')}]`);
+
+      // Try known v2 method names in order of likelihood
+      const KNOWN = ['pdf', 'parse', 'loadDataBuffer', 'parseBuffer', 'load', 'read'];
+      const method = KNOWN.find(m => typeof parser[m] === 'function')
+                  || methods.find(m => typeof parser[m] === 'function');
+      if (!method) {
+        throw new Error(`PDFParse v2 class has no recognised parse method. Available: [${methods.join(',')}]`);
+      }
+      logger.info(`[RAG] pdf-parse v2 using method: ${method}`);
+      const data = await parser[method](buf);
+      return data.text || data.content || '';
+    }
+
+    throw new Error(
+      `pdf-parse: no usable export found. type=${moduleType}, keys=[${moduleKeys.join(',')}]`
+    );
   }
 
   if (ext === '.docx' || ext === '.doc') {
