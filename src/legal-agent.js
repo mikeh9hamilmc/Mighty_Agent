@@ -150,13 +150,16 @@ async function runLegalAgent(question, onChunk = () => { }) {
   try {
     const chunks = await retrieve(question);
     if (chunks.length > 0) {
-      const relevant = chunks.filter(c => c.score > 0.35); // relevance threshold
+      logger.info(`[Legal] Top RAG score: ${(chunks[0].score * 100).toFixed(1)}%`);
+      const relevant = chunks.filter(c => c.score > 0.15); // lowered relevance threshold
       if (relevant.length > 0) {
         ragContext = relevant
           .map((c, i) => `[Source: ${c.source} | Relevance: ${(c.score * 100).toFixed(0)}%]\n${c.text}`)
           .join('\n\n---\n\n');
         relevant.forEach(c => sources.add(c.source));
         logger.info(`[Legal] RAG: ${relevant.length} relevant chunks from: ${[...sources].join(', ')}`);
+      } else {
+        logger.info(`[Legal] RAG: Chunks found but none met the relevance threshold (top score: ${chunks[0].score.toFixed(2)}).`);
       }
     }
   } catch (err) {
