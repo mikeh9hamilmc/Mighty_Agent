@@ -83,7 +83,9 @@ async function extractText(filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
   if (ext === '.pdf') {
-    const pdfParse = require('pdf-parse');
+    let pdfParse = require('pdf-parse');
+    // Handle both default export styles (CommonJS vs ESM interop)
+    if (typeof pdfParse !== 'function' && pdfParse.default) pdfParse = pdfParse.default;
     const buf = fs.readFileSync(filePath);
     const data = await pdfParse(buf);
     return data.text;
@@ -126,7 +128,8 @@ async function embedBatch(texts) {
     model: 'voyage-law-2',
     inputType: 'document',
   });
-  return response.embeddings;
+  // Voyage AI SDK returns { data: [{ embedding: [...] }, ...] }
+  return response.data.map(d => d.embedding);
 }
 
 async function embedQuery(text) {
@@ -136,7 +139,7 @@ async function embedQuery(text) {
     model: 'voyage-law-2',
     inputType: 'query',
   });
-  return response.embeddings[0];
+  return response.data[0].embedding;
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -184,8 +187,13 @@ async function indexDocuments() {
   }
 
   const SUPPORTED = new Set(['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.txt', '.md']);
+  const EXCLUDED   = new Set(['readme.md']); // never index meta/documentation files
   const files = fs.readdirSync(LEGAL_DATA_DIR)
-    .filter(f => SUPPORTED.has(path.extname(f).toLowerCase()))
+    .filter(f => {
+      const ext  = path.extname(f).toLowerCase();
+      const base = f.toLowerCase();
+      return SUPPORTED.has(ext) && !EXCLUDED.has(base) && !f.startsWith('.');
+    })
     .map(f => path.join(LEGAL_DATA_DIR, f));
 
   if (files.length === 0) {
