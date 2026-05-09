@@ -83,20 +83,35 @@ async function extractText(filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
   if (ext === '.pdf') {
-    // pdf-parse has inconsistent export shapes across environments —
-    // try every known shape before giving up.
     const pdfParseModule = require('pdf-parse');
-    const pdfParse =
+
+    // Log exact module shape so we can diagnose cross-platform export differences
+    const moduleType = typeof pdfParseModule;
+    const moduleKeys = moduleType === 'object' && pdfParseModule ? Object.keys(pdfParseModule) : [];
+    logger.info(`[RAG] pdf-parse module: type=${moduleType}, keys=[${moduleKeys.join(',')}]`);
+
+    // Try every known export shape, then scan all values for a function
+    let pdfParse =
       typeof pdfParseModule === 'function'             ? pdfParseModule :
       typeof pdfParseModule.default === 'function'     ? pdfParseModule.default :
       typeof pdfParseModule.pdfParse === 'function'    ? pdfParseModule.pdfParse :
-      // Fall back to the internal path directly
-      require('pdf-parse/lib/pdf-parse.js');
+      moduleKeys.length > 0
+        ? Object.values(pdfParseModule).find(v => typeof v === 'function')
+        : null;
 
-    logger.info(`[RAG] pdf-parse resolved: ${typeof pdfParse}`);
-    if (typeof pdfParse !== 'function') {
-      throw new Error(`pdf-parse did not export a function. Got type: ${typeof pdfParseModule}, keys: ${Object.keys(pdfParseModule).join(', ')}`);
+    // Last resort: internal lib path (blocked on strict exports-map envs)
+    if (!pdfParse) {
+      try {
+        pdfParse = require('pdf-parse/lib/pdf-parse.js');
+      } catch (innerErr) {
+        throw new Error(
+          `pdf-parse function not found. type=${moduleType}, keys=[${moduleKeys.join(',')}]. ` +
+          `Internal path blocked: ${innerErr.message}`
+        );
+      }
     }
+
+    logger.info(`[RAG] pdf-parse function resolved: ${typeof pdfParse}`);
     const buf = fs.readFileSync(filePath);
     const data = await pdfParse(buf);
     return data.text;
