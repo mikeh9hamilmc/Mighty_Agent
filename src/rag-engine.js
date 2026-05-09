@@ -297,7 +297,7 @@ async function indexDocuments() {
     `📄 Files indexed: ${_index.size} (${added} new/updated, ${skipped} unchanged, ${failed} failed)`,
     `🧩 Total chunks: ${totalChunks}`,
   ];
-  if (newFiles.length > 0) lines.push(`\nNewly indexed:\n${newFiles.map(f => `  • ${f}`).join('\n')}`);
+  if (newFiles.length > 0) lines.push(`\nNewly indexed:\n${newFiles.map(f => `  • \`${f}\``).join('\n')}`);
   return lines.join('\n');
 }
 
@@ -335,7 +335,7 @@ function indexStatus() {
   if (fileCount === 0) {
     return 'No documents indexed yet. Say "ask legal read documents" to index your files.';
   }
-  const files = [..._index.values()].map(e => `  • ${e.source} (${e.chunks.length} chunks)`).join('\n');
+  const files = [..._index.values()].map(e => `  • \`${e.source}\` (${e.chunks.length} chunks)`).join('\n');
   return `📚 *Legal RAG Index*\n${fileCount} file(s), ${totalChunks} total chunks:\n${files}`;
 }
 

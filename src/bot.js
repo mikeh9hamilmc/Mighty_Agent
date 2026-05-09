@@ -140,7 +140,7 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
   if (sources.length > 0) {
     const srcText = sources
       .slice(0, 5)
-      .map(s => `• ${s.length > 80 ? s.slice(0, 77) + '...' : s}`)
+      .map(s => `• \`${s.length > 80 ? s.slice(0, 77) + '...' : s}\``)
       .join('\n');
     await ctx.reply(`📚 *Sources used:*\n${srcText}`, { parse_mode: 'Markdown' });
   }
