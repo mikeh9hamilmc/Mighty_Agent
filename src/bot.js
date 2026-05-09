@@ -109,8 +109,11 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
           accumulated.slice(0, 4000), // Telegram limit
           { parse_mode: 'Markdown' }
         );
-      } catch (_) { /* ignore race conditions on rapid edits */ }
-      lastEdit = now;
+        lastEdit = now;
+      } catch (err) {
+        // If it's a markdown error, it might recover on the next chunk, so just ignore
+        lastEdit = now;
+      }
     }
   };
 
@@ -134,7 +137,18 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
       finalText,
       { parse_mode: 'Markdown' }
     );
-  } catch (_) { /* message may already be up to date */ }
+  } catch (err) {
+    logger.warn(`[Legal] Telegram Markdown error on final edit: ${err.message}. Retrying as plain text.`);
+    try {
+      // Fallback: send without markdown if Telegram's strict parser rejected it
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinkingMsgId, undefined,
+        finalText
+      );
+    } catch (fallbackErr) {
+      logger.error(`[Legal] Final edit fallback also failed: ${fallbackErr.message}`);
+    }
+  }
 
   // If there are document sources, send a follow-up message
   if (sources.length > 0) {
