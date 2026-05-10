@@ -19,7 +19,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { ANTHROPIC_API_KEY } = require('./config');
-const { initLegalTools, executeTool, documentStatus } = require('./legal-tools');
+const { initLegalTools, ensureInitialized, executeTool, documentStatus } = require('./legal-tools');
 const logger = require('./logger');
 
 const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
@@ -154,6 +154,80 @@ const TOOLS = [
       required: ['query'],
     },
   },
+  {
+    name: 'create_document',
+    description:
+      'Create a new document file in the legal/data/ folder. ' +
+      'Use this to draft legal motions, declarations, letters, or any document the client needs. ' +
+      'Always use .md (Markdown) format — it preserves headers, bold text, bullets, and numbered lists, ' +
+      'and can be converted to Word with convert_to_word. ' +
+      'Write the FULL document content in one call. ' +
+      'Example filenames: "Motion_Declaratory_Judgment.md", "Affidavit_Hamilton.md".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        filename: {
+          type: 'string',
+          description: 'Filename for the new document (e.g. "Motion_Strike_Marriage_Claim.md"). Must end in .md or .txt.',
+        },
+        content: {
+          type: 'string',
+          description: 'Full content of the document, written in Markdown. Include proper legal formatting: case caption, title, numbered sections, signature block.',
+        },
+        overwrite: {
+          type: 'boolean',
+          description: 'Set to true to overwrite an existing file with the same name. Default: false.',
+        },
+      },
+      required: ['filename', 'content'],
+    },
+  },
+  {
+    name: 'edit_document',
+    description:
+      'Replace a specific range of lines in an existing .md or .txt document. ' +
+      'Use view_document first to see line numbers, then call this to replace the target lines. ' +
+      'The new_content replaces everything from start_line through end_line (inclusive).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        filename: {
+          type: 'string',
+          description: 'The filename to edit (e.g. "Motion_Strike.md"). Partial filename matches are supported.',
+        },
+        start_line: {
+          type: 'integer',
+          description: '1-indexed line number where the replacement starts.',
+        },
+        end_line: {
+          type: 'integer',
+          description: '1-indexed line number where the replacement ends (inclusive).',
+        },
+        new_content: {
+          type: 'string',
+          description: 'Replacement text for the specified line range. Can be multiple lines.',
+        },
+      },
+      required: ['filename', 'start_line', 'end_line', 'new_content'],
+    },
+  },
+  {
+    name: 'convert_to_word',
+    description:
+      'Convert a .md or .txt file in legal/data/ to a Microsoft Word .docx file using pandoc. ' +
+      'The output file is saved in legal/data/ with the same base name but .docx extension. ' +
+      'Always do this AFTER creating or finishing edits to a document, when the user requests a Word file.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        filename: {
+          type: 'string',
+          description: 'The source .md or .txt filename to convert (e.g. "Motion_Strike.md").',
+        },
+      },
+      required: ['filename'],
+    },
+  },
 ];
 
 // ─── Special Commands ─────────────────────────────────────────────────────────
@@ -195,6 +269,10 @@ async function runLegalAgent(question, onChunk = () => { }) {
     onChunk(summary);
     return { answer: summary, sources: [] };
   }
+
+  // ── Ensure document cache is loaded ──────────────────────────────────────
+  // Auto-initializes on first query; no-ops on subsequent queries.
+  await ensureInitialized();
 
   // ── Agentic tool-calling loop ─────────────────────────────────────────────
 

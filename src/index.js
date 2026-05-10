@@ -2,10 +2,20 @@
 
 const bot = require('./bot');
 const { initScheduler } = require('./scheduler');
+const { initLegalTools } = require('./legal-tools');
 const logger = require('./logger');
 
 async function main() {
   logger.info('Starting Mini OpenClaw Agent...');
+
+  // Pre-warm legal document cache in background (non-blocking).
+  // By the time the first query arrives the cache will already be populated.
+  initLegalTools()
+    .then(summary => {
+      const line2 = summary.split('\n')[1] || 'ready';
+      logger.info(`[Legal Tools] Startup: ${line2}`);
+    })
+    .catch(err => logger.warn(`[Legal Tools] Startup cache warning: ${err.message}`));
 
   // Graceful shutdown
   process.once('SIGINT', () => {
