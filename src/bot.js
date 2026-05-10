@@ -179,6 +179,7 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
 }
 
 bot.on('text', async (ctx) => {
+  try {
   const rawMessage = ctx.message.text;
   logger.info(`Message from ${ctx.from.id}: ${rawMessage}`);
 
@@ -191,7 +192,12 @@ bot.on('text', async (ctx) => {
 
     if (agentName === 'legal') {
       const thinking = await ctx.reply('⚖️ Legal is thinking...');
-      await streamLegalResponse(ctx, thinking.message_id, question);
+      // Fire in background — do NOT await. Telegraf has a 90s handler timeout
+      // and legal queries can take several minutes across many tool iterations.
+      streamLegalResponse(ctx, thinking.message_id, question).catch(err => {
+        logger.error(`[Legal] Background stream error: ${err.message}`);
+        ctx.reply(`❌ Legal agent error: ${err.message}`).catch(() => {});
+      });
       return;
     }
 
@@ -240,7 +246,11 @@ bot.on('text', async (ctx) => {
       ctx.chat.id, thinking.message_id, undefined,
       '⚖️ Legal is thinking...'
     );
-    await streamLegalResponse(ctx, thinking.message_id, decision.task);
+    // Fire in background — do NOT await (same timeout reason as above)
+    streamLegalResponse(ctx, thinking.message_id, decision.task).catch(err => {
+      logger.error(`[Legal] Background stream error: ${err.message}`);
+      ctx.reply(`❌ Legal agent error: ${err.message}`).catch(() => {});
+    });
     return;
   }
 
@@ -261,6 +271,20 @@ bot.on('text', async (ctx) => {
   if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
 
   await ctx.reply(result, { parse_mode: 'Markdown' });
+
+  } catch (err) {
+    logger.error(`[Bot] Unhandled text handler error: ${err.message}`);
+    try { await ctx.reply(`❌ Unexpected error: ${err.message}`); } catch (_) {}
+  }
+});
+
+// ─── Global error handler — prevents fatal crashes ──────────────────────────
+// Catches any unhandled middleware/handler rejections Telegraf surfaces.
+bot.catch((err, ctx) => {
+  logger.error(`[Bot] Global error for update ${ctx?.update?.update_id}: ${err.message}`);
+  if (ctx) {
+    ctx.reply(`❌ Something went wrong: ${err.message}`).catch(() => {});
+  }
 });
 
 module.exports = bot;
