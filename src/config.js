@@ -31,7 +31,6 @@ module.exports = {
   SKILLS_DIR,
   // Legal sub-agent
   BRAVE_API_KEY:    optional('BRAVE_API_KEY'),
-  VOYAGE_API_KEY:   optional('VOYAGE_API_KEY'),
   LEGAL_DATA_DIR:   path.resolve(SKILLS_DIR, 'legal', 'data'),
-  LEGAL_INDEX_FILE: path.resolve(SKILLS_DIR, 'legal', 'data', '.rag-index.json'),
+  LEGAL_CACHE_DIR:  path.resolve(SKILLS_DIR, 'legal', 'data', '.legal-cache'),
 };

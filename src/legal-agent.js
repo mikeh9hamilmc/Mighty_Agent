@@ -1,65 +1,152 @@
 'use strict';
 
 /**
- * Legal Sub-Agent
+ * Legal Sub-Agent — Direct File Access Architecture
  *
  * An AI attorney with expertise in:
  *  - Florida: criminal law, civil litigation, family law (Pinellas County)
  *  - Texas: Family Code §2.401 informal/common-law marriage, partition lawsuits
  *
- * Workflow:
- *  1. Retrieve top-K relevant chunks from the RAG index.
- *  2. Pass them as grounding context to Claude Sonnet.
- *  3. If web search is needed (tool call), query Brave Search API.
- *  4. Stream the final answer back via the provided callback.
+ * Workflow (agentic tool loop):
+ *  1. Receive user question.
+ *  2. Claude decides which tools to call: list_documents, grep_documents,
+ *     view_document, or web_search.
+ *  3. Execute tools, return results, repeat up to MAX_ITERATIONS.
+ *  4. Stream the final answer back via onChunk callback.
+ *
+ * All iterations use streaming for debugging visibility.
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
-const fetch = require('node-fetch');
-const { ANTHROPIC_API_KEY, BRAVE_API_KEY } = require('./config');
-const { indexDocuments, retrieve, indexStatus } = require('./rag-engine');
+const { ANTHROPIC_API_KEY } = require('./config');
+const { initLegalTools, executeTool, documentStatus } = require('./legal-tools');
 const logger = require('./logger');
 
 const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
 
 const LEGAL_MODEL = 'claude-opus-4-7';
-const MAX_ITERATIONS = 8;
+const MAX_ITERATIONS = 15;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Legal, an experienced attorney with expertise in:
+const SYSTEM_PROMPT = `You are Legal, an experienced attorney and legal research assistant for the active case:
 
-FLORIDA (Pinellas County focus):
+  Hamilton v. Le — Manatee County partition action (Case No. 25-CA-000347)
+
+Your expertise includes:
+
+FLORIDA (Pinellas County / Manatee County):
 • Criminal law — charges, defenses, plea negotiations, trial procedure
-• Civil litigation — breach of contract, torts, small claims, injunctions
+• Civil litigation — breach of contract, torts, small claims, injunctions, partition actions (Fla. Stat. Ch. 64)
 • Family law — divorce, child custody/support, alimony, domestic violence injunctions, parental rights
 
 TEXAS:
-• Texas Family Code §2.401 — informal (common-law) marriage: elements, proof, challenges, putative spouse doctrine
+• Texas Family Code §2.401 — informal (common-law) marriage: elements, proof, challenges, putative spouse doctrine, 2-year separation presumption under §2.401(b)
 • Partition and exchange agreements — division of community property, enforceability, partition lawsuits
 
-GUIDELINES:
-• Cite the specific statute, rule, or document source when answering (e.g., "Per Florida Statute §61.08..." or "According to [filename]...").
-• If the user's documents contain relevant facts, reference them explicitly.
-• Ask clarifying questions when key facts are missing.
-• If you must search the web, prioritize official sources: leg.state.fl.us, statutes.leg.state.tx.us, Pinellas County court records, Westlaw-style summaries.
-• Be direct and precise — give actionable legal analysis, not generic disclaimers.
-• Format long answers with headers and bullet points for readability in Telegram.`;
+TOOLS AVAILABLE:
+You have access to the client's case documents. Use these tools to find and cite specific evidence:
 
-// ─── Brave Search Tool ────────────────────────────────────────────────────────
+• list_documents — See all available case files with metadata. Start here if you don't know what's in the file system.
+• grep_documents — Search for specific terms, dates, dollar amounts, names, or phrases across all documents. Use this to FIND relevant content before reading it. Supports regex patterns.
+• view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep. Also use to read an entire short document.
+• web_search — Search the web for statutes, case law, court rules, or legal news. Use when the client's documents don't contain the answer (e.g., statutory research, case law lookup).
+
+WORKFLOW:
+1. For questions about the case documents: use grep_documents to locate relevant content → view_document to read context → formulate your answer citing specific lines.
+2. For broad questions ("summarize this document"): use view_document to read the document in chunks.
+3. For legal research questions: use web_search to find statutes, case law, etc.
+4. Always ground factual claims in a specific document — cite the filename and line numbers.
+
+IMPORTANT WARNINGS:
+• Document text is extracted via OCR. When reporting specific dollar amounts, dates, or case numbers that will be used in legal filings, note that the user should verify against the source PDF.
+• Be direct and precise — give actionable legal analysis.
+• Format answers with headers and bullet points for readability in Telegram.
+• Cite sources: "Per Case Summary_1-7.pdf (lines 45-52)..." or "Per Florida Statute §61.08..."`;
+
+// ─── Tool Definitions (Anthropic schema) ──────────────────────────────────────
 
 const TOOLS = [
+  {
+    name: 'list_documents',
+    description:
+      'List all case documents in the legal/data/ folder with metadata: ' +
+      'filename, file size, line count, page count (PDF), and document type guess. ' +
+      'Use this first to see what documents are available.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'grep_documents',
+    description:
+      'Search for a pattern (regex or literal string) across all case documents. ' +
+      'Returns matching lines with surrounding context. ' +
+      'Use this to find specific dates, dollar amounts, names, legal terms, or phrases. ' +
+      'Examples: "April 2024", "$516,651", "Judge Whyte", "partition".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pattern: {
+          type: 'string',
+          description: 'The search pattern (regex or literal string).',
+        },
+        case_sensitive: {
+          type: 'boolean',
+          description: 'Whether the search is case-sensitive. Default: false.',
+        },
+        context_lines: {
+          type: 'integer',
+          description: 'Number of context lines to show above/below each match. Default: 3.',
+        },
+        file_filter: {
+          type: 'string',
+          description: 'Optional: only search files whose name contains this string (e.g. "statement" to search only bank statements).',
+        },
+      },
+      required: ['pattern'],
+    },
+  },
+  {
+    name: 'view_document',
+    description:
+      'Read a specific document or a range of lines from it. ' +
+      'If no range is specified: returns the entire file if under 2000 lines, ' +
+      'otherwise returns the first 200 lines with a note about total length. ' +
+      'Use start_line/end_line to view specific sections.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        filename: {
+          type: 'string',
+          description: 'The filename to read (e.g. "Case Summary_1-7.pdf"). Partial matches are supported.',
+        },
+        start_line: {
+          type: 'integer',
+          description: 'Start line number (1-indexed). Optional.',
+        },
+        end_line: {
+          type: 'integer',
+          description: 'End line number (1-indexed). Optional.',
+        },
+      },
+      required: ['filename'],
+    },
+  },
   {
     name: 'web_search',
     description:
       'Search the web for legal statutes, case law, Florida/Texas court rules, or current legal news. ' +
-      'Use this when the user\'s documents do not contain sufficient information to answer the question.',
+      'Use this when the client\'s documents do not contain sufficient information to answer the question. ' +
+      'Be specific — include jurisdiction and statute numbers when relevant.',
     input_schema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'The search query. Be specific — include jurisdiction and statute numbers when relevant.',
+          description: 'The search query.',
         },
       },
       required: ['query'],
@@ -67,52 +154,17 @@ const TOOLS = [
   },
 ];
 
-async function toolWebSearch({ query }) {
-  if (!BRAVE_API_KEY) {
-    return { error: 'BRAVE_API_KEY is not configured. Add it to .env to enable web search.' };
-  }
-
-  logger.info(`[Legal] Web search: ${query}`);
-
-  try {
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&text_decorations=false`;
-    const res = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': BRAVE_API_KEY,
-      },
-    });
-
-    if (!res.ok) {
-      return { error: `Brave API error: ${res.status} ${res.statusText}` };
-    }
-
-    const data = await res.json();
-    const results = (data.web?.results || []).slice(0, 5).map(r => ({
-      title: r.title,
-      url: r.url,
-      description: r.description || '',
-    }));
-
-    return { results };
-  } catch (err) {
-    logger.error(`[Legal] Brave Search error: ${err.message}`);
-    return { error: err.message };
-  }
-}
-
 // ─── Special Commands ─────────────────────────────────────────────────────────
 
-/** True if the message is requesting a document index rebuild. */
+/** True if the message is requesting a document cache rebuild. */
 function isReadCommand(msg) {
-  return /\b(read|index|load|reload|scan)\b.*\bdoc/i.test(msg) ||
-    /\bdoc.*\b(read|index|load|reload|scan)\b/i.test(msg);
+  return /\b(read|index|load|reload|scan|cache|refresh)\b.*\bdoc/i.test(msg) ||
+    /\bdoc.*\b(read|index|load|reload|scan|cache|refresh)\b/i.test(msg);
 }
 
-/** True if the user is asking for index status. */
+/** True if the user is asking for document status. */
 function isStatusCommand(msg) {
-  return /\b(how many|status|what.*loaded|documents.*loaded|index.*status)\b/i.test(msg);
+  return /\b(how many|status|what.*loaded|documents.*loaded|index.*status|what files)\b/i.test(msg);
 }
 
 // ─── Streaming Agent Loop ────────────────────────────────────────────────────
@@ -130,56 +182,22 @@ async function runLegalAgent(question, onChunk = () => { }) {
   // ── Special commands ──────────────────────────────────────────────────────
 
   if (isStatusCommand(question)) {
-    const status = indexStatus();
+    const status = documentStatus();
     onChunk(status);
     return { answer: status, sources: [] };
   }
 
   if (isReadCommand(question)) {
-    onChunk('📂 Scanning and indexing documents...\n');
-    const summary = await indexDocuments();
+    onChunk('📂 Scanning and caching documents...\n');
+    const summary = await initLegalTools();
     onChunk(summary);
     return { answer: summary, sources: [] };
   }
 
-  // ── RAG retrieval ─────────────────────────────────────────────────────────
+  // ── Agentic tool-calling loop ─────────────────────────────────────────────
 
-  let ragContext = '';
+  const messages = [{ role: 'user', content: question }];
   const sources = new Set();
-
-  try {
-    const chunks = await retrieve(question);
-    if (chunks.length > 0) {
-      logger.info(`[Legal] Top RAG score: ${(chunks[0].score * 100).toFixed(1)}%`);
-      const relevant = chunks.filter(c => c.score > 0.15); // lowered relevance threshold
-      if (relevant.length > 0) {
-        ragContext = relevant
-          .map((c, i) => `[Source: ${c.source} | Relevance: ${(c.score * 100).toFixed(0)}%]\n${c.text}`)
-          .join('\n\n---\n\n');
-        relevant.forEach(c => sources.add(c.source));
-        logger.info(`[Legal] RAG: ${relevant.length} relevant chunks from: ${[...sources].join(', ')}`);
-      } else {
-        logger.info(`[Legal] RAG: Chunks found but none met the relevance threshold (top score: ${chunks[0].score.toFixed(2)}).`);
-      }
-    }
-  } catch (err) {
-    logger.warn(`[Legal] RAG retrieval failed: ${err.message}. Proceeding without document context.`);
-  }
-
-  // ── Build initial user message ────────────────────────────────────────────
-
-  let userContent = question;
-  if (ragContext) {
-    userContent =
-      `The user's question: ${question}\n\n` +
-      `Relevant excerpts from the user's uploaded documents:\n\n${ragContext}\n\n` +
-      `Use these excerpts to ground your answer. Cite the source filename when referencing them.`;
-  }
-
-  const messages = [{ role: 'user', content: userContent }];
-
-  // ── Agentic loop with streaming ───────────────────────────────────────────
-
   let fullAnswer = '';
   let iterations = 0;
 
@@ -187,12 +205,10 @@ async function runLegalAgent(question, onChunk = () => { }) {
     iterations++;
     logger.info(`[Legal] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
-    // Use streaming for the final text turn; use non-streaming for tool-use turns.
-    const toolUseBlocks = [];
-
+    // Stream ALL turns for debugging visibility
     const stream = await client.messages.stream({
       model: LEGAL_MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: SYSTEM_PROMPT,
       tools: TOOLS,
       messages,
@@ -213,17 +229,13 @@ async function runLegalAgent(question, onChunk = () => { }) {
 
     const finalMsg = await stream.finalMessage();
 
-    // Collect any tool use blocks
-    for (const block of finalMsg.content) {
-      if (block.type === 'tool_use') {
-        toolUseBlocks.push(block);
-      }
-    }
+    // Collect tool-use blocks
+    const toolUseBlocks = finalMsg.content.filter(b => b.type === 'tool_use');
 
     // Push assistant turn
     messages.push({ role: 'assistant', content: finalMsg.content });
 
-    // If no tool calls, we're done
+    // If no tool calls, the agent is done
     if (toolUseBlocks.length === 0) {
       logger.info('[Legal] Agent finished (no more tool calls).');
       break;
@@ -233,14 +245,18 @@ async function runLegalAgent(question, onChunk = () => { }) {
     const toolResults = [];
     for (const block of toolUseBlocks) {
       logger.info(`[Legal] Tool call: ${block.name} ${JSON.stringify(block.input)}`);
-      let result;
-      if (block.name === 'web_search') {
-        result = await toolWebSearch(block.input);
-        if (result.results) {
-          result.results.forEach(r => sources.add(r.url));
-        }
-      } else {
-        result = { error: `Unknown tool: ${block.name}` };
+
+      const result = await executeTool(block.name, block.input);
+
+      // Track sources from document tools
+      if (block.name === 'view_document' && result.filename) {
+        sources.add(result.filename);
+      }
+      if (block.name === 'grep_documents' && result.matches) {
+        result.matches.forEach(m => sources.add(m.file));
+      }
+      if (block.name === 'web_search' && result.results) {
+        result.results.forEach(r => sources.add(r.url));
       }
 
       toolResults.push({
