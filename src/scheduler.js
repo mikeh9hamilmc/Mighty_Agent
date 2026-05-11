@@ -27,7 +27,7 @@ function initScheduler(bot) {
   // Task: Run "dip-buy" every hour from 4:00 AM to 8:00 PM on weekdays.
   // Guard prevents overlapping runs if a previous execution is still in progress.
   let dipBuyRunning = false;
-  new CronJob('* * * * *', async () => { // TESTING: every minute (restore to '0 4-20 * * 1-5')
+  new CronJob('0 4-20 * * 1-5', async () => { // TESTING: every minute ('* * * * *')
     if (dipBuyRunning) {
       logger.warn('[Scheduler] Skipping dip-buy: previous run still in progress.');
       return;
@@ -35,7 +35,7 @@ function initScheduler(bot) {
     dipBuyRunning = true;
     logger.info('Running scheduled task: Hourly Dip-Buy Check');
     try {
-      const { output } = await runSkill('dip-buy'); //, ['--silent']
+      const { output } = await runSkill('dip-buy', ['--silent']); //, ['--silent']
       if (output && output.trim().length > 0) {
         await bot.telegram.sendMessage(AUTHORIZED_USER_ID, output, { parse_mode: 'Markdown' });
         logger.info('Dip-buy skill output sent to user.');
