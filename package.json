@@ -13,9 +13,9 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.94.0",
+    "cron": "^4.4.0",
     "dotenv": "^17.4.2",
     "mammoth": "^1.12.0",
-    "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
     "telegraf": "^4.16.3",
     "winston": "^3.19.0",

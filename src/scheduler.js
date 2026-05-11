@@ -1,6 +1,6 @@
 'use strict';
 
-const cron = require('node-cron');
+const { CronJob } = require('cron');
 const { AUTHORIZED_USER_ID } = require('./config');
 const logger = require('./logger');
 const { runSkill } = require('./executor');
@@ -13,7 +13,7 @@ function initScheduler(bot) {
   logger.info('Initializing scheduler...');
 
   // Task: Send "Good morning" (using good-morning skill) every day at 9:00 AM
-  cron.schedule('0 9 * * *', async () => {
+  new CronJob('0 9 * * *', async () => {
     logger.info('Running scheduled task: Morning Greeting');
     try {
       const { output } = await runSkill('good-morning');
@@ -22,12 +22,12 @@ function initScheduler(bot) {
     } catch (err) {
       logger.error(`Failed to execute morning greeting skill: ${err.message}`);
     }
-  });
+  }).start();
 
   // Task: Run "dip-buy" every hour from 4:00 AM to 8:00 PM on weekdays.
   // Guard prevents overlapping runs if a previous execution is still in progress.
   let dipBuyRunning = false;
-  cron.schedule('*/2 * * * *', async () => { // TESTING: every 2 min (restore to '0 4-20 * * 1-5')
+  new CronJob('*/2 * * * *', async () => { // TESTING: every 2 min (restore to '0 4-20 * * 1-5')
     if (dipBuyRunning) {
       logger.warn('[Scheduler] Skipping dip-buy: previous run still in progress.');
       return;
@@ -45,7 +45,7 @@ function initScheduler(bot) {
     } finally {
       dipBuyRunning = false;
     }
-  });
+  }).start();
 
   logger.info('Scheduled tasks initialized (9 AM Greeting, Hourly Weekday Dip-Buy).');
 }
