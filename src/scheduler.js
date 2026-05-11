@@ -27,7 +27,7 @@ function initScheduler(bot) {
   // Task: Run "dip-buy" every hour from 4:00 AM to 8:00 PM on weekdays.
   // Guard prevents overlapping runs if a previous execution is still in progress.
   let dipBuyRunning = false;
-  cron.schedule('* * * * *', async () => { // TESTING: every minute (restore to '0 4-20 * * 1-5')
+  cron.schedule('*/2 * * * *', async () => { // TESTING: every 2 min (restore to '0 4-20 * * 1-5')
     if (dipBuyRunning) {
       logger.warn('[Scheduler] Skipping dip-buy: previous run still in progress.');
       return;
