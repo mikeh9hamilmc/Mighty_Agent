@@ -68,6 +68,10 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 ## Change Log
 
 ### 2026-05-11
+- **Legal Agent Memory**: Implemented a persistent long-term memory system using a new `skills/legal/memory/` directory. Added `save_memory`, `read_memory`, and `list_memories` tools to allow the agent to autonomously record and recall strategic details.
+- **Core Memory Auto-Injection**: Enabled automatic injection of the `core_memory.md` file into the Legal Agent's system prompt for instantaneous recall of case-critical facts without needing tool calls.
+- **Routing Flexibility**: Enhanced the "ask <agent>" routing in `bot.js` to support punctuation and varying separators (e.g., `"ask legal,"`, `"ask legal:"`).
+- **Caching Optimization**: Fixed a logging issue where `.md` and `.txt` files were incorrectly reported as "extracted" during startup; they are now correctly logged as "Loaded text" and categorized as cached.
 - **Legal Agent Document Tools**: Added `create_document`, `edit_document`, and `convert_to_word` (pandoc) tools to the Legal sub-agent. The agent can now draft legal motions in Markdown and convert them to `.docx` files for the user.
 - **Async Optimization**: Refactored `src/legal-tools.js` to use async `execFile` for PDF extraction and Word conversion. This prevents synchronous child processes from blocking the Node.js event loop during background tasks.
 - **Scheduler Reliability (WSL2 Fix)**: Replaced `node-cron` with the `cron` package. This resolves the "missed execution" warnings and job skipping caused by WSL2 clock drift and `node-cron`'s fragile 1000ms threshold.
