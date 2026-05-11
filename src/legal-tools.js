@@ -33,7 +33,7 @@ const { execFile, execFileSync } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const fetch = require('node-fetch');
-const { LEGAL_DATA_DIR, LEGAL_CACHE_DIR, BRAVE_API_KEY } = require('./config');
+const { LEGAL_DATA_DIR, LEGAL_CACHE_DIR, LEGAL_MEMORY_DIR, BRAVE_API_KEY } = require('./config');
 const logger = require('./logger');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -578,6 +578,71 @@ async function toolConvertToWord({ filename }) {
   };
 }
 
+// ─── MEMORY Tool Implementations ────────────────────────────────────────────────
+function ensureMemoryDir() {
+  if (!fs.existsSync(LEGAL_MEMORY_DIR)) {
+    fs.mkdirSync(LEGAL_MEMORY_DIR, { recursive: true });
+  }
+}
+
+function toolSaveMemory({ topic, content }) {
+  ensureMemoryDir();
+  const safeTopic = topic.replace(/[^a-z0-9_-]/gi, '_');
+  const filename = `${safeTopic}.md`;
+  const filePath = path.join(LEGAL_MEMORY_DIR, filename);
+
+  try {
+    fs.writeFileSync(filePath, content, 'utf-8');
+    logger.info(`[Legal Memory] Saved: ${filename}`);
+    return { success: true, message: `✅ Memory saved to \`${filename}\`.` };
+  } catch (err) {
+    logger.error(`[Legal Memory] Failed to save ${filename}: ${err.message}`);
+    return { error: `Failed to save memory: ${err.message}` };
+  }
+}
+
+function toolReadMemory({ topic }) {
+  ensureMemoryDir();
+  const safeTopic = topic.replace(/[^a-z0-9_-]/gi, '_');
+  const filename = topic.endsWith('.md') ? topic : `${safeTopic}.md`;
+  const filePath = path.join(LEGAL_MEMORY_DIR, filename);
+
+  if (!fs.existsSync(filePath)) {
+    return { error: `Memory file "${filename}" not found.` };
+  }
+
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return { filename, content };
+  } catch (err) {
+    return { error: `Failed to read memory: ${err.message}` };
+  }
+}
+
+function toolListMemories() {
+  ensureMemoryDir();
+  try {
+    const files = fs.readdirSync(LEGAL_MEMORY_DIR).filter(f => f.endsWith('.md'));
+    if (files.length === 0) return { message: 'Memory folder is empty.' };
+    return { files };
+  } catch (err) {
+    return { error: `Failed to list memories: ${err.message}` };
+  }
+}
+
+function getCoreMemory() {
+  ensureMemoryDir();
+  const corePath = path.join(LEGAL_MEMORY_DIR, 'core_memory.md');
+  if (fs.existsSync(corePath)) {
+    try {
+      return fs.readFileSync(corePath, 'utf-8');
+    } catch (err) {
+      logger.error(`[Legal Memory] Failed to read core_memory.md: ${err.message}`);
+    }
+  }
+  return null;
+}
+
 // ─── Tool dispatcher ──────────────────────────────────────────────────────────
 
 async function executeTool(name, input) {
@@ -589,6 +654,9 @@ async function executeTool(name, input) {
     case 'create_document':  return await toolCreateDocument(input);
     case 'edit_document':    return toolEditDocument(input);
     case 'convert_to_word':  return await toolConvertToWord(input);
+    case 'save_memory':      return toolSaveMemory(input);
+    case 'read_memory':      return toolReadMemory(input);
+    case 'list_memories':    return toolListMemories(input);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
@@ -619,4 +687,8 @@ module.exports = {
   toolCreateDocument,
   toolEditDocument,
   toolConvertToWord,
+  toolSaveMemory,
+  toolReadMemory,
+  toolListMemories,
+  getCoreMemory,
 };

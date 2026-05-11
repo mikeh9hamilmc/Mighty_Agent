@@ -33,4 +33,5 @@ module.exports = {
   BRAVE_API_KEY:    optional('BRAVE_API_KEY'),
   LEGAL_DATA_DIR:   path.resolve(SKILLS_DIR, 'legal', 'data'),
   LEGAL_CACHE_DIR:  path.resolve(SKILLS_DIR, 'legal', 'data', '.legal-cache'),
+  LEGAL_MEMORY_DIR: path.resolve(SKILLS_DIR, 'legal', 'memory'),
 };

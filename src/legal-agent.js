@@ -19,7 +19,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { ANTHROPIC_API_KEY } = require('./config');
-const { initLegalTools, ensureInitialized, executeTool, documentStatus } = require('./legal-tools');
+const { initLegalTools, ensureInitialized, executeTool, documentStatus, getCoreMemory } = require('./legal-tools');
 const logger = require('./logger');
 
 const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
@@ -64,7 +64,13 @@ IMPORTANT WARNINGS:
 • Document text is extracted via OCR. When reporting specific dollar amounts, dates, or case numbers that will be used in legal filings, note that the user should verify against the source PDF.
 • Be direct and precise — give actionable legal analysis.
 • Format answers with headers and bullet points for readability in Telegram.
-• Cite sources: "Per Case Summary_1-7.pdf (lines 45-52)..." or "Per Florida Statute §61.08..."`;
+• Cite sources: "Per Case Summary_1-7.pdf (lines 45-52)..." or "Per Florida Statute §61.08..."
+
+MEMORY SYSTEM:
+You possess persistent long-term memory. You have a private memory folder where you store your notes, case timelines, and strategies.
+• At the end of a conversation, or when learning a critical new fact or decision, use \`save_memory\` to record it.
+• When starting a new task, use \`list_memories\` and \`read_memory\` to recall previous context.
+• (Critical facts may be auto-injected below by the system).`;
 
 // ─── Tool Definitions (Anthropic schema) ──────────────────────────────────────
 
@@ -228,6 +234,49 @@ const TOOLS = [
       required: ['filename'],
     },
   },
+  {
+    name: 'save_memory',
+    description:
+      'Save important facts, decisions, or summaries to your persistent long-term memory. ' +
+      'Use this at the end of a conversation or when you learn something you need to remember for future chats.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description: 'A short, safe filename for this memory (e.g., "case_strategy", "jenne_timeline").',
+        },
+        content: {
+          type: 'string',
+          description: 'The detailed notes to save, written in Markdown.',
+        },
+      },
+      required: ['topic', 'content'],
+    },
+  },
+  {
+    name: 'read_memory',
+    description: 'Read a specific memory file from your persistent long-term memory.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description: 'The topic/filename of the memory to read (e.g., "case_strategy").',
+        },
+      },
+      required: ['topic'],
+    },
+  },
+  {
+    name: 'list_memories',
+    description: 'List all topics currently stored in your persistent long-term memory.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // ─── Special Commands ─────────────────────────────────────────────────────────
@@ -285,11 +334,18 @@ async function runLegalAgent(question, onChunk = () => { }) {
     iterations++;
     logger.info(`[Legal] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
+    // Auto-inject core memory into the system prompt
+    let currentSystemPrompt = SYSTEM_PROMPT;
+    const coreMem = getCoreMemory();
+    if (coreMem) {
+      currentSystemPrompt += `\n\n--- AUTO-INJECTED CORE MEMORY ---\n${coreMem}\n---------------------------------`;
+    }
+
     // Stream ALL turns for debugging visibility
     const stream = await client.messages.stream({
       model: LEGAL_MODEL,
       max_tokens: 8192,
-      system: SYSTEM_PROMPT,
+      system: currentSystemPrompt,
       tools: TOOLS,
       messages,
     });
