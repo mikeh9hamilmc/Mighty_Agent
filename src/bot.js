@@ -284,6 +284,20 @@ bot.on('text', async (ctx) => {
     return;
   }
 
+  // type === 'medical' — delegate to Medical sub-agent
+  if (decision.type === 'medical') {
+    await ctx.telegram.editMessageText(
+      ctx.chat.id, thinking.message_id, undefined,
+      '🩺 Medical is thinking...'
+    );
+    // Fire in background — do NOT await
+    streamAgentResponse(ctx, thinking.message_id, decision.task, 'medical').catch(err => {
+      logger.error(`[Medical] Background stream error: ${err.message}`);
+      ctx.reply(`❌ Medical agent error: ${err.message}`).catch(() => {});
+    });
+    return;
+  }
+
   // type === 'run'
   const { skill, args } = decision;
 

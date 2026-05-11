@@ -63,3 +63,14 @@ deactivate
 
 ## Skills
 The agent discovers skills dynamically from the `skills/` directory. Each skill is a folder containing a `SKILL.md` definition and a `scripts/` directory with a Python entry point.
+
+## Document Agents (Legal & Medical)
+The system includes specialized sub-agents for legal and medical tasks. 
+To provide documents to these agents, simply place them in their respective data folders:
+- `skills/legal/data/`
+- `skills/medical/data/`
+
+**Supported file types:** `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.txt`, `.md`
+
+When a new document is added, it is automatically parsed and cached. 
+You can interact with these agents either via natural language (the system auto-routes based on context) or by explicitly prefixing your message with `"ask legal ..."` or `"ask medical ..."`.
