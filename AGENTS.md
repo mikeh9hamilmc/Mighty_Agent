@@ -67,10 +67,17 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 
 ## Change Log
 
+### 2026-05-11
+- **Legal Agent Document Tools**: Added `create_document`, `edit_document`, and `convert_to_word` (pandoc) tools to the Legal sub-agent. The agent can now draft legal motions in Markdown and convert them to `.docx` files for the user.
+- **Async Optimization**: Refactored `src/legal-tools.js` to use async `execFile` for PDF extraction and Word conversion. This prevents synchronous child processes from blocking the Node.js event loop during background tasks.
+- **Scheduler Reliability (WSL2 Fix)**: Replaced `node-cron` with the `cron` package. This resolves the "missed execution" warnings and job skipping caused by WSL2 clock drift and `node-cron`'s fragile 1000ms threshold.
+- **Error Handling**: Implemented `formatApiError` in `bot.js` to catch Anthropic API errors (like low credit balance or rate limits) and return user-friendly warnings instead of raw JSON errors.
+- **Startup Cache Warming**: The bot now automatically initializes and warms the legal document cache in the background upon startup, ensuring the Legal agent is ready for immediate queries.
+
 ### 2026-05-10
-- **Legal Agent Rewrite — Direct File Access**: Completely replaced the RAG pipeline (`rag-engine.js` + Voyage AI embeddings) with a tool-calling agentic loop. The legal sub-agent now has four tools: `list_documents`, `grep_documents`, `view_document`, and `web_search`. This approach preserves table/financial data structure and handles OCR text far better than chunked embeddings.
-- **New Module - `legal-tools.js`**: Created `src/legal-tools.js` — pure tool implementations for document listing, regex search across all files, line-range viewing, and Brave Search. Uses `pdftotext -layout` (poppler-utils) for PDF text extraction, with mtime-based disk caching to `.legal-cache/`.
-- **Removed - RAG Engine**: Deleted `src/rag-engine.js`. Removed `voyageai` and `pdf-parse` npm dependencies. Removed `VOYAGE_API_KEY` from config and `.env.example`.
+- **Legal Agent Rewrite — Direct File Access**: Completely replaced the RAG pipeline (`rag-engine.js` + Voyage AI embeddings) with a tool-calling agentic loop. The legal sub-agent now has tools for listing, searching (grep), viewing, and creating/editing documents. This approach preserves table/financial data structure and handles OCR text far better than chunked embeddings.
+- **New Module - `legal-tools.js`**: Created `src/legal-tools.js` — pure tool implementations for document lifecycle management. Uses `pdftotext -layout` (poppler-utils) for PDF text extraction, with mtime-based disk caching to `.legal-cache/`.
+- **Removed - RAG Engine**: Deleted `src/rag-engine.js`. Removed `voyageai` and `pdf-parse` npm dependencies.
 - **Kept**: DOCX support (`mammoth`), XLSX support (`xlsx`), Brave Search API, streaming responses, `ask legal` routing.
 
 ### 2026-05-09
