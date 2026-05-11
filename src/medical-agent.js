@@ -1,74 +1,55 @@
 'use strict';
 
 /**
- * Legal Sub-Agent — Direct File Access Architecture
+ * Medical Sub-Agent — Direct File Access Architecture
  *
- * An AI attorney with expertise in:
- *  - Florida: criminal law, civil litigation, family law (Pinellas County)
- *  - Texas: Family Code §2.401 informal/common-law marriage, partition lawsuits
+ * An AI doctor and medical research assistant.
  *
  * Workflow (agentic tool loop):
  *  1. Receive user question.
  *  2. Claude decides which tools to call: list_documents, grep_documents,
- *     view_document, or web_search.
+ *     view_document, or web_search, create_document, etc.
  *  3. Execute tools, return results, repeat up to MAX_ITERATIONS.
  *  4. Stream the final answer back via onChunk callback.
- *
- * All iterations use streaming for debugging visibility.
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { ANTHROPIC_API_KEY } = require('./config');
 const { DocumentManager } = require('./document-tools');
-const legalTools = new DocumentManager('legal');
+const medicalTools = new DocumentManager('medical');
 const logger = require('./logger');
 
 const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
 
-const LEGAL_MODEL = 'claude-opus-4-7';
+const MEDICAL_MODEL = 'claude-sonnet-4-6';
 const MAX_ITERATIONS = 15;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Legal, an experienced attorney for Michael Hamilton and legal research assistant for the active case:
-
-  Hamilton v. Le — Manatee County partition action (Case No. 25-CA-000347)
-
-Michael Hamilton is the plaintiff in this case. Your job is to find evidence that there is no Texas common law marriage between Michael and Jenne.
-
-Your expertise includes:
-
-FLORIDA (Pinellas County / Manatee County):
-• Criminal law — charges, defenses, plea negotiations, trial procedure
-• Civil litigation — breach of contract, torts, small claims, injunctions, partition actions (Fla. Stat. Ch. 64)
-• Family law — divorce, child custody/support, alimony, domestic violence injunctions, parental rights
-
-TEXAS:
-• Texas Family Code §2.401 — informal (common-law) marriage: elements, proof, challenges, putative spouse doctrine, 2-year separation presumption under §2.401(b)
-• Partition and exchange agreements — division of community property, enforceability, partition lawsuits
+const SYSTEM_PROMPT = `You are medical, an experienced doctor for the user and medical research assistant for the user.
 
 TOOLS AVAILABLE:
-You have access to the client's case documents. Use these tools to find and cite specific evidence:
+You have access to the user's medical records and documents. Use these tools to find and cite specific evidence:
 
-• list_documents — See all available case files with metadata. Start here if you don't know what's in the file system.
-• grep_documents — Search for specific terms, dates, dollar amounts, names, or phrases across all documents. Use this to FIND relevant content before reading it. Supports regex patterns.
+• list_documents — See all available medical files with metadata. Start here if you don't know what's in the file system.
+• grep_documents — Search for specific terms, dates, lab results, names, or phrases across all documents. Use this to FIND relevant content before reading it. Supports regex patterns.
 • view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep. Also use to read an entire short document.
-• web_search — Search the web for statutes, case law, court rules, or legal news. Use when the client's documents don't contain the answer (e.g., statutory research, case law lookup).
+• web_search — Search the web for medical conditions, studies, drug interactions, or treatments. Use when the user's documents don't contain the answer.
 
 WORKFLOW:
-1. For questions about the case documents: use grep_documents to locate relevant content → view_document to read context → formulate your answer citing specific lines.
-2. For broad questions ("summarize this document"): use view_document to read the document in chunks.
-3. For legal research questions: use web_search to find statutes, case law, etc.
+1. For questions about the medical documents: use grep_documents to locate relevant content → view_document to read context → formulate your answer citing specific lines.
+2. For broad questions ("summarize this lab result"): use view_document to read the document in chunks.
+3. For medical research questions: use web_search to find studies, guidelines, etc.
 4. Always ground factual claims in a specific document — cite the filename and line numbers.
 
 IMPORTANT WARNINGS:
-• Document text is extracted via OCR. When reporting specific dollar amounts, dates, or case numbers that will be used in legal filings, note that the user should verify against the source PDF.
-• Be direct and precise — give actionable legal analysis.
+• Document text is extracted via OCR. When reporting specific lab values, dates, or dosages, note that the user should verify against the source PDF.
+• Be direct and precise — give actionable medical analysis, but always include a disclaimer that you are an AI and they should consult a human doctor for serious conditions.
 • Format answers with headers and bullet points for readability in Telegram.
-• Cite sources: "Per Case Summary_1-7.pdf (lines 45-52)..." or "Per Florida Statute §61.08..."
+• Cite sources: "Per Complete_Blood_Count_2025.pdf (lines 45-52)..."
 
 MEMORY SYSTEM:
-You possess persistent long-term memory. You have a private memory folder where you store your notes, case timelines, and strategies.
+You possess persistent long-term memory. You have a private memory folder where you store your notes, timelines, and strategies.
 • At the end of a conversation, or when learning a critical new fact or decision, use \`save_memory\` to record it.
 • When starting a new task, use \`list_memories\` and \`read_memory\` to recall previous context.
 • (Critical facts may be auto-injected below by the system).`;
@@ -79,7 +60,7 @@ const TOOLS = [
   {
     name: 'list_documents',
     description:
-      'List all case documents in the legal/data/ folder with metadata: ' +
+      'List all medical documents in the medical/data/ folder with metadata: ' +
       'filename, file size, line count, page count (PDF), and document type guess. ' +
       'Use this first to see what documents are available.',
     input_schema: {
@@ -91,10 +72,10 @@ const TOOLS = [
   {
     name: 'grep_documents',
     description:
-      'Search for a pattern (regex or literal string) across all case documents. ' +
+      'Search for a pattern (regex or literal string) across all medical documents. ' +
       'Returns matching lines with surrounding context. ' +
-      'Use this to find specific dates, dollar amounts, names, legal terms, or phrases. ' +
-      'Examples: "April 2024", "$516,651", "Judge Whyte", "partition".',
+      'Use this to find specific dates, lab values, names, medical terms, or phrases. ' +
+      'Examples: "April 2024", "glucose", "Dr. Smith".',
     input_schema: {
       type: 'object',
       properties: {
@@ -112,7 +93,7 @@ const TOOLS = [
         },
         file_filter: {
           type: 'string',
-          description: 'Optional: only search files whose name contains this string (e.g. "statement" to search only bank statements).',
+          description: 'Optional: only search files whose name contains this string (e.g. "lab" to search only lab results).',
         },
       },
       required: ['pattern'],
@@ -130,7 +111,7 @@ const TOOLS = [
       properties: {
         filename: {
           type: 'string',
-          description: 'The filename to read (e.g. "Case Summary_1-7.pdf"). Partial matches are supported.',
+          description: 'The filename to read (e.g. "Blood_Test_1-7.pdf"). Partial matches are supported.',
         },
         start_line: {
           type: 'integer',
@@ -147,9 +128,8 @@ const TOOLS = [
   {
     name: 'web_search',
     description:
-      'Search the web for legal statutes, case law, Florida/Texas court rules, or current legal news. ' +
-      'Use this when the client\'s documents do not contain sufficient information to answer the question. ' +
-      'Be specific — include jurisdiction and statute numbers when relevant.',
+      'Search the web for medical conditions, treatments, drug interactions, or guidelines. ' +
+      'Use this when the user\'s documents do not contain sufficient information to answer the question. ',
     input_schema: {
       type: 'object',
       properties: {
@@ -164,22 +144,19 @@ const TOOLS = [
   {
     name: 'create_document',
     description:
-      'Create a new document file in the legal/data/ folder. ' +
-      'Use this to draft legal motions, declarations, letters, or any document the client needs. ' +
-      'Always use .md (Markdown) format — it preserves headers, bold text, bullets, and numbered lists, ' +
-      'and can be converted to Word with convert_to_word. ' +
-      'Write the FULL document content in one call. ' +
-      'Example filenames: "Motion_Declaratory_Judgment.md", "Affidavit_Hamilton.md".',
+      'Create a new document file in the medical/data/ folder. ' +
+      'Use this to draft letters, treatment plans, or any document the user needs. ' +
+      'Always use .md (Markdown) format.',
     input_schema: {
       type: 'object',
       properties: {
         filename: {
           type: 'string',
-          description: 'Filename for the new document (e.g. "Motion_Strike_Marriage_Claim.md"). Must end in .md or .txt.',
+          description: 'Filename for the new document (e.g. "Treatment_Plan.md"). Must end in .md or .txt.',
         },
         content: {
           type: 'string',
-          description: 'Full content of the document, written in Markdown. Include proper legal formatting: case caption, title, numbered sections, signature block.',
+          description: 'Full content of the document, written in Markdown.',
         },
         overwrite: {
           type: 'boolean',
@@ -200,7 +177,7 @@ const TOOLS = [
       properties: {
         filename: {
           type: 'string',
-          description: 'The filename to edit (e.g. "Motion_Strike.md"). Partial filename matches are supported.',
+          description: 'The filename to edit (e.g. "Treatment_Plan.md"). Partial filename matches are supported.',
         },
         start_line: {
           type: 'integer',
@@ -221,15 +198,15 @@ const TOOLS = [
   {
     name: 'convert_to_word',
     description:
-      'Convert a .md or .txt file in legal/data/ to a Microsoft Word .docx file using pandoc. ' +
-      'The output file is saved in legal/data/ with the same base name but .docx extension. ' +
+      'Convert a .md or .txt file in medical/data/ to a Microsoft Word .docx file using pandoc. ' +
+      'The output file is saved in medical/data/ with the same base name but .docx extension. ' +
       'Always do this AFTER creating or finishing edits to a document, when the user requests a Word file.',
     input_schema: {
       type: 'object',
       properties: {
         filename: {
           type: 'string',
-          description: 'The source .md or .txt filename to convert (e.g. "Motion_Strike.md").',
+          description: 'The source .md or .txt filename to convert (e.g. "Treatment_Plan.md").',
         },
       },
       required: ['filename'],
@@ -245,7 +222,7 @@ const TOOLS = [
       properties: {
         topic: {
           type: 'string',
-          description: 'A short, safe filename for this memory (e.g., "case_strategy", "jenne_timeline").',
+          description: 'A short, safe filename for this memory (e.g., "allergies", "vaccine_timeline").',
         },
         content: {
           type: 'string',
@@ -263,7 +240,7 @@ const TOOLS = [
       properties: {
         topic: {
           type: 'string',
-          description: 'The topic/filename of the memory to read (e.g., "case_strategy").',
+          description: 'The topic/filename of the memory to read (e.g., "allergies").',
         },
       },
       required: ['topic'],
@@ -296,33 +273,33 @@ function isStatusCommand(msg) {
 // ─── Streaming Agent Loop ────────────────────────────────────────────────────
 
 /**
- * Run the Legal sub-agent for a given question.
+ * Run the Medical sub-agent for a given question.
  *
- * @param {string} question  The user's legal question.
+ * @param {string} question  The user's medical question.
  * @param {function} onChunk Callback called with each streamed text chunk (string).
  * @returns {Promise<{ answer: string, sources: string[] }>}
  */
-async function runLegalAgent(question, onChunk = () => { }) {
-  logger.info(`[Legal] Question: ${question}`);
+async function runMedicalAgent(question, onChunk = () => { }) {
+  logger.info(`[Medical] Question: ${question}`);
 
   // ── Special commands ──────────────────────────────────────────────────────
 
   if (isStatusCommand(question)) {
-    const status = legalTools.documentStatus();
+    const status = medicalTools.documentStatus();
     onChunk(status);
     return { answer: status, sources: [] };
   }
 
   if (isReadCommand(question)) {
     onChunk('📂 Scanning and caching documents...\n');
-    const summary = await legalTools.initTools();
+    const summary = await medicalTools.initTools();
     onChunk(summary);
     return { answer: summary, sources: [] };
   }
 
   // ── Ensure document cache is loaded ──────────────────────────────────────
   // Auto-initializes on first query; no-ops on subsequent queries.
-  await legalTools.ensureInitialized();
+  await medicalTools.ensureInitialized();
 
   // ── Agentic tool-calling loop ─────────────────────────────────────────────
 
@@ -333,18 +310,18 @@ async function runLegalAgent(question, onChunk = () => { }) {
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
-    logger.info(`[Legal] Iteration ${iterations}/${MAX_ITERATIONS}`);
+    logger.info(`[Medical] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
     // Auto-inject core memory into the system prompt
     let currentSystemPrompt = SYSTEM_PROMPT;
-    const coreMem = legalTools.getCoreMemory();
+    const coreMem = medicalTools.getCoreMemory();
     if (coreMem) {
       currentSystemPrompt += `\n\n--- AUTO-INJECTED CORE MEMORY ---\n${coreMem}\n---------------------------------`;
     }
 
     // Stream ALL turns for debugging visibility
     const stream = await client.messages.stream({
-      model: LEGAL_MODEL,
+      model: MEDICAL_MODEL,
       max_tokens: 8192,
       system: currentSystemPrompt,
       tools: TOOLS,
@@ -374,16 +351,16 @@ async function runLegalAgent(question, onChunk = () => { }) {
 
     // If no tool calls, the agent is done
     if (toolUseBlocks.length === 0) {
-      logger.info('[Legal] Agent finished (no more tool calls).');
+      logger.info('[Medical] Agent finished (no more tool calls).');
       break;
     }
 
     // Execute tool calls
     const toolResults = [];
     for (const block of toolUseBlocks) {
-      logger.info(`[Legal] Tool call: ${block.name} ${JSON.stringify(block.input)}`);
+      logger.info(`[Medical] Tool call: ${block.name} ${JSON.stringify(block.input)}`);
 
-      const result = await legalTools.executeTool(block.name, block.input);
+      const result = await medicalTools.executeTool(block.name, block.input);
 
       // Track sources from document tools
       if (block.name === 'view_document' && result.filename) {
@@ -408,13 +385,13 @@ async function runLegalAgent(question, onChunk = () => { }) {
 
   if (!fullAnswer) {
     fullAnswer = iterations >= MAX_ITERATIONS
-      ? '⚠️ Legal agent reached the iteration limit. Try rephrasing your question.'
+      ? '⚠️ Medical agent reached the iteration limit. Try rephrasing your question.'
       : '⚠️ No answer generated.';
     onChunk(fullAnswer);
   }
 
-  logger.info(`[Legal] Done. Sources: ${[...sources].join(', ') || 'none'}`);
+  logger.info(`[Medical] Done. Sources: ${[...sources].join(', ') || 'none'}`);
   return { answer: fullAnswer, sources: [...sources] };
 }
 
-module.exports = { runLegalAgent };
+module.exports = { runMedicalAgent };

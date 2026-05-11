@@ -6,6 +6,7 @@ const { runSkill } = require('./executor');
 const { decideAction, SKILLS } = require('./llm');
 const { runCoderAgent } = require('./coder-agent');
 const { runLegalAgent } = require('./legal-agent');
+const { runMedicalAgent } = require('./medical-agent');
 const logger = require('./logger');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
@@ -110,13 +111,14 @@ bot.command('status', async (ctx) => {
 // ─── Natural Language → LLM → Skill ––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 
 /**
- * Stream a Legal agent response back to Telegram.
+ * Stream an Agent response back to Telegram.
  * Edits the initial "thinking" message with accumulating text every 800ms.
  */
-async function streamLegalResponse(ctx, thinkingMsgId, question) {
+async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   let accumulated = '';
   let lastEdit    = Date.now();
   const EDIT_INTERVAL_MS = 800;
+  const agentCap = agentName.charAt(0).toUpperCase() + agentName.slice(1);
 
   // Streaming edit loop
   const editIfDue = async () => {
@@ -140,7 +142,8 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
 
   let sources = [];
   try {
-    const result = await runLegalAgent(question, (chunk) => {
+    const runAgent = agentName === 'legal' ? runLegalAgent : runMedicalAgent;
+    const result = await runAgent(question, (chunk) => {
       accumulated += chunk;
     });
     sources = result.sources || [];
@@ -164,11 +167,11 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
     );
   } catch (err) {
     if (!err.message.includes('message is not modified')) {
-      logger.warn(`[Legal] Telegram Markdown error on final edit: ${err.message}. Retrying as plain text.`);
+      logger.warn(`[${agentCap}] Telegram Markdown error on final edit: ${err.message}. Retrying as plain text.`);
       try {
         await ctx.telegram.editMessageText(ctx.chat.id, thinkingMsgId, undefined, messageChunks[0]);
       } catch (fallbackErr) {
-        logger.error(`[Legal] Final edit fallback also failed: ${fallbackErr.message}`);
+        logger.error(`[${agentCap}] Final edit fallback also failed: ${fallbackErr.message}`);
       }
     }
   }
@@ -178,11 +181,11 @@ async function streamLegalResponse(ctx, thinkingMsgId, question) {
     try {
       await ctx.reply(messageChunks[i], { parse_mode: 'Markdown' });
     } catch (err) {
-      logger.warn(`[Legal] Telegram Markdown error on follow-up chunk: ${err.message}. Retrying as plain text.`);
+      logger.warn(`[${agentCap}] Telegram Markdown error on follow-up chunk: ${err.message}. Retrying as plain text.`);
       try {
         await ctx.reply(messageChunks[i]);
       } catch (fallbackErr) {
-        logger.error(`[Legal] Follow-up chunk fallback also failed: ${fallbackErr.message}`);
+        logger.error(`[${agentCap}] Follow-up chunk fallback also failed: ${fallbackErr.message}`);
       }
     }
   }
@@ -212,16 +215,24 @@ bot.on('text', async (ctx) => {
     if (agentName === 'legal') {
       const thinking = await ctx.reply('⚖️ Legal is thinking...');
       // Fire in background — do NOT await. Telegraf has a 90s handler timeout
-      // and legal queries can take several minutes across many tool iterations.
-      streamLegalResponse(ctx, thinking.message_id, question).catch(err => {
+      // and agent queries can take several minutes across many tool iterations.
+      streamAgentResponse(ctx, thinking.message_id, question, 'legal').catch(err => {
         logger.error(`[Legal] Background stream error: ${err.message}`);
         ctx.reply(formatApiError(err)).catch(() => {});
       });
       return;
     }
 
-    // Future agents: 'medical', 'financial', etc.
-    // For now, fall through to normal LLM routing
+    if (agentName === 'medical') {
+      const thinking = await ctx.reply('🩺 Medical is thinking...');
+      streamAgentResponse(ctx, thinking.message_id, question, 'medical').catch(err => {
+        logger.error(`[Medical] Background stream error: ${err.message}`);
+        ctx.reply(formatApiError(err)).catch(() => {});
+      });
+      return;
+    }
+
+    // Future agents: 'financial', etc.
   }
 
   const userMessage = rawMessage;
@@ -266,7 +277,7 @@ bot.on('text', async (ctx) => {
       '⚖️ Legal is thinking...'
     );
     // Fire in background — do NOT await (same timeout reason as above)
-    streamLegalResponse(ctx, thinking.message_id, decision.task).catch(err => {
+    streamAgentResponse(ctx, thinking.message_id, decision.task, 'legal').catch(err => {
       logger.error(`[Legal] Background stream error: ${err.message}`);
       ctx.reply(`❌ Legal agent error: ${err.message}`).catch(() => {});
     });
