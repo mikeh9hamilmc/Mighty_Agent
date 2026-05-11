@@ -203,8 +203,8 @@ bot.on('text', async (ctx) => {
   logger.info(`Message from ${ctx.from.id}: ${rawMessage}`);
 
   // ── "ask <agent>" prefix routing ──────────────────────────────────────────
-  // Supports: "ask legal ...", "ask medical ...", etc.
-  const askMatch = rawMessage.match(/^ask\s+(\w+)[:\s]+(.+)/is);
+  // Supports: "ask legal ...", "ask legal, ...", "ask legal: ..."
+  const askMatch = rawMessage.match(/^ask\s+(\w+)[.,;:\s]+(.+)/is);
   if (askMatch) {
     const agentName = askMatch[1].toLowerCase();
     const question  = askMatch[2].trim();
