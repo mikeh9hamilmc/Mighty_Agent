@@ -24,8 +24,15 @@ function initScheduler(bot) {
     }
   });
 
-  // Task: Run "dip-buy" every hour from 4:00 AM to 8:00 PM on weekdays
+  // Task: Run "dip-buy" every hour from 4:00 AM to 8:00 PM on weekdays.
+  // Guard prevents overlapping runs if a previous execution is still in progress.
+  let dipBuyRunning = false;
   cron.schedule('0 4-20 * * 1-5', async () => {
+    if (dipBuyRunning) {
+      logger.warn('[Scheduler] Skipping dip-buy: previous run still in progress.');
+      return;
+    }
+    dipBuyRunning = true;
     logger.info('Running scheduled task: Hourly Dip-Buy Check');
     try {
       const { output } = await runSkill('dip-buy'); //, ['--silent']
@@ -35,6 +42,8 @@ function initScheduler(bot) {
       }
     } catch (err) {
       logger.error(`Failed to execute dip-buy skill: ${err.message}`);
+    } finally {
+      dipBuyRunning = false;
     }
   });
 

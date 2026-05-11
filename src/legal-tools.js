@@ -29,7 +29,9 @@
 
 const fs   = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 const fetch = require('node-fetch');
 const { LEGAL_DATA_DIR, LEGAL_CACHE_DIR, BRAVE_API_KEY } = require('./config');
 const logger = require('./logger');
@@ -93,13 +95,18 @@ function countPdfPages(text) {
   return count;
 }
 
-function extractPdfText(filePath) {
+/**
+ * Extract text from a PDF using pdftotext -layout.
+ * Async — does NOT block the event loop.
+ */
+async function extractPdfText(filePath) {
   try {
-    return execFileSync('pdftotext', ['-layout', filePath, '-'], {
+    const { stdout } = await execFileAsync('pdftotext', ['-layout', filePath, '-'], {
       encoding:  'utf-8',
       maxBuffer: 50 * 1024 * 1024,
       timeout:   60_000,
     });
+    return stdout;
   } catch (err) {
     if (err.code === 'ENOENT') {
       throw new Error('pdftotext not found — sudo apt-get install poppler-utils');
@@ -541,9 +548,9 @@ async function toolConvertToWord({ filename }) {
 
   try {
     logger.info(`[Legal Tools] Converting ${filename} → ${outputName} via pandoc`);
-    execFileSync('pandoc', [entry.filePath, '-o', outputPath, '--from=markdown', '--to=docx'], {
-      timeout:   60_000,
-      encoding:  'utf-8',
+    await execFileAsync('pandoc', [entry.filePath, '-o', outputPath, '--from=markdown', '--to=docx'], {
+      timeout:  60_000,
+      encoding: 'utf-8',
     });
   } catch (err) {
     if (err.code === 'ENOENT') {
