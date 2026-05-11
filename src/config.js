@@ -25,7 +25,7 @@ const SKILLS_DIR = path.resolve(__dirname, '..', 'skills');
 module.exports = {
   TELEGRAM_TOKEN:     required('TELEGRAM_TOKEN'),
   AUTHORIZED_USER_ID: parseInt(required('AUTHORIZED_USER_ID'), 10),
-  ANTHROPIC_API_KEY:  required('ANTHROPIC_API_KEY'),
+  OPENROUTER_API_KEY: required('OPENROUTER_API_KEY'),
   PYTHON_CMD:         process.env.PYTHON_CMD || 'python',
   SCRIPT_TIMEOUT_MS:  parseInt(process.env.SCRIPT_TIMEOUT_SEC || '60', 10) * 1000,
   SKILLS_DIR,

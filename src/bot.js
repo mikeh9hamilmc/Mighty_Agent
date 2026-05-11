@@ -20,7 +20,7 @@ const startTime = Date.now();
 function formatApiError(err) {
   const msg = err.message || '';
   if (msg.includes('credit balance is too low') || msg.includes('Your credit balance')) {
-    return '⚠️ Out of AI credits. Please go to https://console.anthropic.com/settings/billing to top up, then try again.';
+    return '⚠️ Out of AI credits. Please top up your OpenRouter account at https://openrouter.ai/settings/billing then try again.';
   }
   if (msg.includes('rate_limit') || msg.includes('rate limit')) {
     return '⚠️ AI rate limit reached. Please wait a moment and try again.';
@@ -255,7 +255,7 @@ bot.on('text', async (ctx) => {
   if (decision.type === 'code') {
     await ctx.telegram.editMessageText(
       ctx.chat.id, thinking.message_id, undefined,
-      '🧑‍💻 Consulting the Coder sub-agent (Claude Opus)... this may take a moment.'
+      '🧑‍💻 Consulting the Coder sub-agent... this may take a moment.'
     );
 
     const { summary, filesCreated } = await runCoderAgent(decision.task);

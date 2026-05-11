@@ -14,16 +14,16 @@ The system is built as a modular Node.js application that bridges the gap betwee
     - **Security Middleware**: Validates every incoming message against the `AUTHORIZED_USER_ID`. Unauthorized messages are silently ignored.
     - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/run`, and `/status`.
     - **Natural Language Handler**: Routes all non-command text messages to the LLM layer.
-- **`src/llm.js`**: Interfaces with the Anthropic Claude API (`claude-haiku-4-5`).
+- **`src/llm.js`**: Interfaces with the OpenRouter API (`@preset/mighty-agent-main`).
     - **Skill Discovery**: Dynamically scans the `skills/` directory and parses `SKILL.md` files to build the LLM's tool context.
-    - **Decision Logic**: Claude decides whether to respond conversationally or to trigger a skill execution based on user intent.
+    - **Decision Logic**: The LLM decides whether to respond conversationally or to trigger a skill execution based on user intent.
 - **`src/executor.js`**: Handles the actual execution of Python scripts within skills.
     - **Resolution**: Dynamically resolves the entry-point script for a given skill.
     - **Security**: Sanitizes names and enforces path restrictions.
     - **Robustness**: Implements a configurable execution timeout and forces UTF-8 encoding for cross-platform compatibility.
 - **`src/config.js`**: Centralized configuration and environment variable validation.
 - **`src/logger.js`**: Structured logging using `winston`, writing to both the console and `logs/agent.log`.
-- **`src/coder-agent.js`**: The **Coder sub-agent**. A local autonomous coding agent powered by Claude Opus (`claude-opus-4-7`).
+- **`src/coder-agent.js`**: The **Coder sub-agent**. A local autonomous coding agent powered by OpenRouter (`@preset/mighty-agent-coder`).
     - **Agentic Loop**: Runs up to 15 iterations, calling tools until the task is complete or no more tool calls are made.
     - **Tools**: `write_file`, `read_file`, `list_files`, `execute_python` — all sandboxed to the `skills/` directory.
     - **Skill Creation**: Can autonomously create new skills (SKILL.md + Python scripts), test them, and fix errors before reporting success.
@@ -34,8 +34,8 @@ The system is built as a modular Node.js application that bridges the gap betwee
 2.  **Authentication**: The bot checks if the user's ID matches the `AUTHORIZED_USER_ID` in `.env`.
 3.  **Analysis**:
     - If it's a command (e.g., `/run date-time`), it goes straight to the Executor.
-    - If it's text, it's sent to Claude with the current skill manifest (names and descriptions).
-4.  **Decision**: Claude returns JSON indicating either a conversational `reply` or a `run` action with a specific `skill` name and `args`.
+    - If it's text, it's sent to the LLM with the current skill manifest (names and descriptions).
+4.  **Decision**: The LLM returns JSON indicating either a conversational `reply` or a `run` action with a specific `skill` name and `args`.
 5.  **Execution**: (If `run`) The Executor locates the script for the specified skill, spawns a Python child process, captures output, and monitors for timeouts.
 6.  **Output**: The bot sends the conversational response or the skill's output back to the user.
 
@@ -68,6 +68,25 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 ## Change Log
 
 ### 2026-05-11
+- **Medical Agent — OpenRouter Migration**: Migrated the Medical sub-agent from the direct Anthropic SDK to OpenRouter API using the `@preset/mighty-agent-medical` model.
+    - Updated `medical-agent.js` to use `node-fetch` for API calls.
+    - Converted all medical tools to OpenAI-compatible tool definitions (type: 'function').
+    - Implemented a manual agentic loop with tool-call handling to replace the SDK's automatic streaming loop.
+    - Updated `config.js` to support `OPENROUTER_API_KEY`.
+- **Legal Agent — OpenRouter Migration**: Migrated the Legal sub-agent from the direct Anthropic SDK to OpenRouter API using the `@preset/mighty-agent-legal` model.
+    - Updated `legal-agent.js` to use `node-fetch` for API calls.
+    - Converted all legal tools to OpenAI-compatible tool definitions (type: 'function').
+    - Implemented a manual agentic loop with tool-call handling.
+- **Coder Agent — OpenRouter Migration**: Migrated the Coder sub-agent from the direct Anthropic SDK to OpenRouter API using the `@preset/mighty-agent-coder` model.
+    - Updated `coder-agent.js` to use `node-fetch` for API calls.
+    - Converted all coding tools to OpenAI-compatible tool definitions (type: 'function').
+    - Implemented a manual agentic loop with tool-call handling.
+- **Main Agent — OpenRouter Migration**: Migrated the Main LLM router from the direct Anthropic SDK to OpenRouter API using the `@preset/mighty-agent-main` model.
+    - Updated `llm.js` to use `node-fetch` for API calls.
+- **Skill Discovery - Legal & Medical**: Created `SKILL.md` files and standardized folder structures for `skills/legal/` and `skills/medical/`.
+    - Added `data/` and `memory/` subdirectories to both skills.
+    - Added `README.md` in data folders to guide user file placement.
+    - This allows the main LLM router to discover these sub-agents as formal skills while maintaining their specialized "ask <agent>" routing.
 - **Legal Agent Memory**: Implemented a persistent long-term memory system using a new `skills/legal/memory/` directory. Added `save_memory`, `read_memory`, and `list_memories` tools to allow the agent to autonomously record and recall strategic details.
 - **Core Memory Auto-Injection**: Enabled automatic injection of the `core_memory.md` file into the Legal Agent's system prompt for instantaneous recall of case-critical facts without needing tool calls.
 - **Routing Flexibility**: Enhanced the "ask <agent>" routing in `bot.js` to support punctuation and varying separators (e.g., `"ask legal,"`, `"ask legal:"`).
@@ -75,7 +94,7 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 - **Legal Agent Document Tools**: Added `create_document`, `edit_document`, and `convert_to_word` (pandoc) tools to the Legal sub-agent. The agent can now draft legal motions in Markdown and convert them to `.docx` files for the user.
 - **Async Optimization**: Refactored `src/legal-tools.js` to use async `execFile` for PDF extraction and Word conversion. This prevents synchronous child processes from blocking the Node.js event loop during background tasks.
 - **Scheduler Reliability (WSL2 Fix)**: Replaced `node-cron` with the `cron` package. This resolves the "missed execution" warnings and job skipping caused by WSL2 clock drift and `node-cron`'s fragile 1000ms threshold.
-- **Error Handling**: Implemented `formatApiError` in `bot.js` to catch Anthropic API errors (like low credit balance or rate limits) and return user-friendly warnings instead of raw JSON errors.
+- **Error Handling**: Implemented `formatApiError` in `bot.js` to catch LLM API errors (like low credit balance or rate limits) and return user-friendly warnings instead of raw JSON errors.
 - **Startup Cache Warming**: The bot now automatically initializes and warms the legal document cache in the background upon startup, ensuring the Legal agent is ready for immediate queries.
 
 ### 2026-05-10

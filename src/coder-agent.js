@@ -1,15 +1,13 @@
 'use strict';
 
-const Anthropic = require('@anthropic-ai/sdk');
+const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { ANTHROPIC_API_KEY, SKILLS_DIR, PYTHON_CMD } = require('./config');
+const { OPENROUTER_API_KEY, SKILLS_DIR, PYTHON_CMD } = require('./config');
 const logger = require('./logger');
 
-const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
-
-const CODER_MODEL = 'claude-opus-4-7';
+const CODER_MODEL = '@preset/mighty-agent-coder';
 const MAX_ITERATIONS = 15;
 const PYTHON_TIMEOUT_MS = 30_000;
 
@@ -17,78 +15,90 @@ const PYTHON_TIMEOUT_MS = 30_000;
 
 const TOOLS = [
   {
-    name: 'write_file',
-    description:
-      'Write content to a file inside the skills/ directory. Creates directories as needed. ' +
-      'Use this to create SKILL.md files and Python scripts for new skills. ' +
-      'Path must be relative to the skills/ directory (e.g. "my-skill/SKILL.md" or "my-skill/scripts/my_script.py").',
-    input_schema: {
-      type: 'object',
-      properties: {
-        relative_path: {
-          type: 'string',
-          description: 'Path relative to the skills/ directory (e.g. "my-skill/scripts/my_script.py")',
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description:
+        'Write content to a file inside the skills/ directory. Creates directories as needed. ' +
+        'Use this to create SKILL.md files and Python scripts for new skills. ' +
+        'Path must be relative to the skills/ directory (e.g. "my-skill/SKILL.md" or "my-skill/scripts/my_script.py").',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description: 'Path relative to the skills/ directory (e.g. "my-skill/scripts/my_script.py")',
+          },
+          content: {
+            type: 'string',
+            description: 'The full file content to write.',
+          },
         },
-        content: {
-          type: 'string',
-          description: 'The full file content to write.',
-        },
+        required: ['relative_path', 'content'],
       },
-      required: ['relative_path', 'content'],
     },
   },
   {
-    name: 'read_file',
-    description:
-      'Read the content of a file. Path must be relative to the skills/ directory. ' +
-      'Useful for reading existing skill files as a reference.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        relative_path: {
-          type: 'string',
-          description: 'Path relative to the skills/ directory.',
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description:
+        'Read the content of a file. Path must be relative to the skills/ directory. ' +
+        'Useful for reading existing skill files as a reference.',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description: 'Path relative to the skills/ directory.',
+          },
         },
+        required: ['relative_path'],
       },
-      required: ['relative_path'],
     },
   },
   {
-    name: 'list_files',
-    description:
-      'List files and directories. Path must be relative to the skills/ directory. ' +
-      'Defaults to listing the top-level skills/ directory if no path is given.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        relative_path: {
-          type: 'string',
-          description: 'Path relative to skills/ directory. Omit or use "" to list all skills.',
+    type: 'function',
+    function: {
+      name: 'list_files',
+      description:
+        'List files and directories. Path must be relative to the skills/ directory. ' +
+        'Defaults to listing the top-level skills/ directory if no path is given.',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description: 'Path relative to skills/ directory. Omit or use "" to list all skills.',
+          },
         },
+        required: [],
       },
-      required: [],
     },
   },
   {
-    name: 'execute_python',
-    description:
-      'Execute a Python script and return its stdout and stderr. ' +
-      'Path must be relative to the skills/ directory. ' +
-      'Use this to test scripts you have written before declaring the task complete.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        relative_path: {
-          type: 'string',
-          description: 'Path to the Python script, relative to the skills/ directory.',
+    type: 'function',
+    function: {
+      name: 'execute_python',
+      description:
+        'Execute a Python script and return its stdout and stderr. ' +
+        'Path must be relative to the skills/ directory. ' +
+        'Use this to test scripts you have written before declaring the task complete.',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: {
+            type: 'string',
+            description: 'Path to the Python script, relative to the skills/ directory.',
+          },
+          args: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Optional CLI arguments to pass to the script.',
+          },
         },
-        args: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional CLI arguments to pass to the script.',
-        },
+        required: ['relative_path'],
       },
-      required: ['relative_path'],
     },
   },
 ];
@@ -253,13 +263,45 @@ Workflow:
 Always test your code before reporting success. Never report done unless execute_python returned exit code 0.`;
 
 /**
+ * Helper to call OpenRouter API.
+ */
+async function callOpenRouter(messages, tools) {
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured in .env');
+
+  const url = "https://openrouter.ai/api/v1/chat/completions";
+  const headers = {
+    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json"
+  };
+  const payload = {
+    model: CODER_MODEL,
+    messages: messages,
+    tools: tools,
+    tool_choice: "auto"
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
  * Run the Coder sub-agent for a given task.
  * Returns { summary: string, filesCreated: string[] }
  */
 async function runCoderAgent(task) {
   logger.info(`[Coder] Starting task: ${task}`);
 
-  const messages = [
+  let messages = [
     { role: 'user', content: task },
   ];
 
@@ -271,50 +313,46 @@ async function runCoderAgent(task) {
     iterations++;
     logger.info(`[Coder] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
-    const response = await client.messages.create({
-      model: CODER_MODEL,
-      max_tokens: 8192,
-      system: SYSTEM_PROMPT,
-      tools: TOOLS,
-      messages,
-    });
+    const systemMsg = { role: 'system', content: SYSTEM_PROMPT };
+    const conversation = [systemMsg, ...messages];
 
-    // Collect the assistant's full content block
-    messages.push({ role: 'assistant', content: response.content });
+    const data = await callOpenRouter(conversation, TOOLS);
+    const assistantMsg = data.choices[0].message;
 
-    const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-    const textBlocks = response.content.filter(b => b.type === 'text');
+    // Add assistant turn to history
+    messages.push(assistantMsg);
 
     // If no tool calls, the agent is done
-    if (toolUseBlocks.length === 0) {
-      finalSummary = textBlocks.map(b => b.text).join('\n').trim();
+    if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+      finalSummary = assistantMsg.content || '';
       logger.info('[Coder] Agent finished (no more tool calls).');
       break;
     }
 
-    // Execute all tool calls and collect results
-    const toolResults = [];
-    for (const block of toolUseBlocks) {
-      logger.info(`[Coder] Tool call: ${block.name} ${JSON.stringify(block.input)}`);
-      const result = await executeTool(block.name, block.input);
+    // Execute tool calls
+    for (const toolCall of assistantMsg.tool_calls) {
+      const { name, arguments: argsJson } = toolCall.function;
+      let args;
+      try {
+        args = JSON.parse(argsJson);
+      } catch (e) {
+        args = {};
+      }
+
+      logger.info(`[Coder] Tool call: ${name} ${argsJson}`);
+      const result = await executeTool(name, args);
 
       // Track created files
-      if (block.name === 'write_file' && result.success) {
+      if (name === 'write_file' && result.success) {
         filesCreated.push(result.path);
       }
 
-      toolResults.push({
-        type: 'tool_result',
-        tool_use_id: block.id,
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        name: name,
         content: JSON.stringify(result),
       });
-    }
-
-    messages.push({ role: 'user', content: toolResults });
-
-    // If stop_reason is end_turn with no tool calls, we're done
-    if (response.stop_reason === 'end_turn' && toolUseBlocks.length === 0) {
-      break;
     }
   }
 

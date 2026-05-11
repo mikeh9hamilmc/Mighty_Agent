@@ -1,12 +1,12 @@
 'use strict';
 
-const Anthropic = require('@anthropic-ai/sdk');
+const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
-const { ANTHROPIC_API_KEY, SKILLS_DIR } = require('./config');
+const { OPENROUTER_API_KEY, SKILLS_DIR } = require('./config');
 const logger = require('./logger');
 
-const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
+const MAIN_MODEL = '@preset/mighty-agent-main';
 
 // ─── Skill loading ────────────────────────────────────────────────────────────
 
@@ -126,14 +126,28 @@ Response format — respond with ONLY raw JSON, no markdown, no code fences:
 IMPORTANT: Respond with raw JSON only. No markdown, no code fences, no extra text.`;
 
   try {
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: MAIN_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ]
+      })
     });
 
-    const raw = response.content[0].text.trim();
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter error: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    const raw = data.choices[0].message.content.trim();
     logger.info(`LLM response: ${raw}`);
 
     let parsed;

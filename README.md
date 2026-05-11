@@ -1,6 +1,6 @@
 # Mighty Agent
 
-A Node.js-based personal agent that uses Claude LLM to interpret natural language via Telegram and execute local Python scripts via modular skills.
+A Node.js-based personal agent that uses an LLM to interpret natural language via Telegram and execute local Python scripts via modular skills.
 
 ## WSL Installation Guide
 
@@ -32,7 +32,7 @@ nano .env
 Required fields:
 - `TELEGRAM_TOKEN`: Your bot token from @BotFather.
 - `AUTHORIZED_USER_ID`: Your Telegram numeric ID.
-- `ANTHROPIC_API_KEY`: Your Claude API key.
+- `OPENROUTER_API_KEY`: Your OpenRouter API key.
 
 ### 4. Start the Agent
 ```bash

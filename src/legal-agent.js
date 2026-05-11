@@ -17,15 +17,13 @@
  * All iterations use streaming for debugging visibility.
  */
 
-const Anthropic = require('@anthropic-ai/sdk');
-const { ANTHROPIC_API_KEY } = require('./config');
+const fetch = require('node-fetch');
+const { OPENROUTER_API_KEY } = require('./config');
 const { DocumentManager } = require('./document-tools');
 const legalTools = new DocumentManager('legal');
 const logger = require('./logger');
 
-const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
-
-const LEGAL_MODEL = 'claude-opus-4-7';
+const LEGAL_MODEL = '@preset/mighty-agent-legal';
 const MAX_ITERATIONS = 15;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
@@ -77,205 +75,235 @@ You possess persistent long-term memory. You have a private memory folder where 
 
 const TOOLS = [
   {
-    name: 'list_documents',
-    description:
-      'List all case documents in the legal/data/ folder with metadata: ' +
-      'filename, file size, line count, page count (PDF), and document type guess. ' +
-      'Use this first to see what documents are available.',
-    input_schema: {
-      type: 'object',
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: 'grep_documents',
-    description:
-      'Search for a pattern (regex or literal string) across all case documents. ' +
-      'Returns matching lines with surrounding context. ' +
-      'Use this to find specific dates, dollar amounts, names, legal terms, or phrases. ' +
-      'Examples: "April 2024", "$516,651", "Judge Whyte", "partition".',
-    input_schema: {
-      type: 'object',
-      properties: {
-        pattern: {
-          type: 'string',
-          description: 'The search pattern (regex or literal string).',
-        },
-        case_sensitive: {
-          type: 'boolean',
-          description: 'Whether the search is case-sensitive. Default: false.',
-        },
-        context_lines: {
-          type: 'integer',
-          description: 'Number of context lines to show above/below each match. Default: 3.',
-        },
-        file_filter: {
-          type: 'string',
-          description: 'Optional: only search files whose name contains this string (e.g. "statement" to search only bank statements).',
-        },
+    type: 'function',
+    function: {
+      name: 'list_documents',
+      description:
+        'List all case documents in the legal/data/ folder with metadata: ' +
+        'filename, file size, line count, page count (PDF), and document type guess. ' +
+        'Use this first to see what documents are available.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
       },
-      required: ['pattern'],
     },
   },
   {
-    name: 'view_document',
-    description:
-      'Read a specific document or a range of lines from it. ' +
-      'If no range is specified: returns the entire file if under 2000 lines, ' +
-      'otherwise returns the first 200 lines with a note about total length. ' +
-      'Use start_line/end_line to view specific sections.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        filename: {
-          type: 'string',
-          description: 'The filename to read (e.g. "Case Summary_1-7.pdf"). Partial matches are supported.',
+    type: 'function',
+    function: {
+      name: 'grep_documents',
+      description:
+        'Search for a pattern (regex or literal string) across all case documents. ' +
+        'Returns matching lines with surrounding context. ' +
+        'Use this to find specific dates, dollar amounts, names, legal terms, or phrases. ' +
+        'Examples: "April 2024", "$516,651", "Judge Whyte", "partition".',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: {
+            type: 'string',
+            description: 'The search pattern (regex or literal string).',
+          },
+          case_sensitive: {
+            type: 'boolean',
+            description: 'Whether the search is case-sensitive. Default: false.',
+          },
+          context_lines: {
+            type: 'integer',
+            description: 'Number of context lines to show above/below each match. Default: 3.',
+          },
+          file_filter: {
+            type: 'string',
+            description: 'Optional: only search files whose name contains this string (e.g. "statement" to search only bank statements).',
+          },
         },
-        start_line: {
-          type: 'integer',
-          description: 'Start line number (1-indexed). Optional.',
-        },
-        end_line: {
-          type: 'integer',
-          description: 'End line number (1-indexed). Optional.',
-        },
+        required: ['pattern'],
       },
-      required: ['filename'],
     },
   },
   {
-    name: 'web_search',
-    description:
-      'Search the web for legal statutes, case law, Florida/Texas court rules, or current legal news. ' +
-      'Use this when the client\'s documents do not contain sufficient information to answer the question. ' +
-      'Be specific — include jurisdiction and statute numbers when relevant.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'string',
-          description: 'The search query.',
+    type: 'function',
+    function: {
+      name: 'view_document',
+      description:
+        'Read a specific document or a range of lines from it. ' +
+        'If no range is specified: returns the entire file if under 2000 lines, ' +
+        'otherwise returns the first 200 lines with a note about total length. ' +
+        'Use start_line/end_line to view specific sections.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The filename to read (e.g. "Case Summary_1-7.pdf"). Partial matches are supported.',
+          },
+          start_line: {
+            type: 'integer',
+            description: 'Start line number (1-indexed). Optional.',
+          },
+          end_line: {
+            type: 'integer',
+            description: 'End line number (1-indexed). Optional.',
+          },
         },
+        required: ['filename'],
       },
-      required: ['query'],
     },
   },
   {
-    name: 'create_document',
-    description:
-      'Create a new document file in the legal/data/ folder. ' +
-      'Use this to draft legal motions, declarations, letters, or any document the client needs. ' +
-      'Always use .md (Markdown) format — it preserves headers, bold text, bullets, and numbered lists, ' +
-      'and can be converted to Word with convert_to_word. ' +
-      'Write the FULL document content in one call. ' +
-      'Example filenames: "Motion_Declaratory_Judgment.md", "Affidavit_Hamilton.md".',
-    input_schema: {
-      type: 'object',
-      properties: {
-        filename: {
-          type: 'string',
-          description: 'Filename for the new document (e.g. "Motion_Strike_Marriage_Claim.md"). Must end in .md or .txt.',
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description:
+        'Search the web for legal statutes, case law, Florida/Texas court rules, or current legal news. ' +
+        'Use this when the client\'s documents do not contain sufficient information to answer the question. ' +
+        'Be specific — include jurisdiction and statute numbers when relevant.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'The search query.',
+          },
         },
-        content: {
-          type: 'string',
-          description: 'Full content of the document, written in Markdown. Include proper legal formatting: case caption, title, numbered sections, signature block.',
-        },
-        overwrite: {
-          type: 'boolean',
-          description: 'Set to true to overwrite an existing file with the same name. Default: false.',
-        },
+        required: ['query'],
       },
-      required: ['filename', 'content'],
     },
   },
   {
-    name: 'edit_document',
-    description:
-      'Replace a specific range of lines in an existing .md or .txt document. ' +
-      'Use view_document first to see line numbers, then call this to replace the target lines. ' +
-      'The new_content replaces everything from start_line through end_line (inclusive).',
-    input_schema: {
-      type: 'object',
-      properties: {
-        filename: {
-          type: 'string',
-          description: 'The filename to edit (e.g. "Motion_Strike.md"). Partial filename matches are supported.',
+    type: 'function',
+    function: {
+      name: 'create_document',
+      description:
+        'Create a new document file in the legal/data/ folder. ' +
+        'Use this to draft legal motions, declarations, letters, or any document the client needs. ' +
+        'Always use .md (Markdown) format — it preserves headers, bold text, bullets, and numbered lists, ' +
+        'and can be converted to Word with convert_to_word. ' +
+        'Write the FULL document content in one call. ' +
+        'Example filenames: "Motion_Declaratory_Judgment.md", "Affidavit_Hamilton.md".',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'Filename for the new document (e.g. "Motion_Strike_Marriage_Claim.md"). Must end in .md or .txt.',
+          },
+          content: {
+            type: 'string',
+            description: 'Full content of the document, written in Markdown. Include proper legal formatting: case caption, title, numbered sections, signature block.',
+          },
+          overwrite: {
+            type: 'boolean',
+            description: 'Set to true to overwrite an existing file with the same name. Default: false.',
+          },
         },
-        start_line: {
-          type: 'integer',
-          description: '1-indexed line number where the replacement starts.',
-        },
-        end_line: {
-          type: 'integer',
-          description: '1-indexed line number where the replacement ends (inclusive).',
-        },
-        new_content: {
-          type: 'string',
-          description: 'Replacement text for the specified line range. Can be multiple lines.',
-        },
+        required: ['filename', 'content'],
       },
-      required: ['filename', 'start_line', 'end_line', 'new_content'],
     },
   },
   {
-    name: 'convert_to_word',
-    description:
-      'Convert a .md or .txt file in legal/data/ to a Microsoft Word .docx file using pandoc. ' +
-      'The output file is saved in legal/data/ with the same base name but .docx extension. ' +
-      'Always do this AFTER creating or finishing edits to a document, when the user requests a Word file.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        filename: {
-          type: 'string',
-          description: 'The source .md or .txt filename to convert (e.g. "Motion_Strike.md").',
+    type: 'function',
+    function: {
+      name: 'edit_document',
+      description:
+        'Replace a specific range of lines in an existing .md or .txt document. ' +
+        'Use view_document first to see line numbers, then call this to replace the target lines. ' +
+        'The new_content replaces everything from start_line through end_line (inclusive).',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The filename to edit (e.g. "Motion_Strike.md"). Partial filename matches are supported.',
+          },
+          start_line: {
+            type: 'integer',
+            description: '1-indexed line number where the replacement starts.',
+          },
+          end_line: {
+            type: 'integer',
+            description: '1-indexed line number where the replacement ends (inclusive).',
+          },
+          new_content: {
+            type: 'string',
+            description: 'Replacement text for the specified line range. Can be multiple lines.',
+          },
         },
+        required: ['filename', 'start_line', 'end_line', 'new_content'],
       },
-      required: ['filename'],
     },
   },
   {
-    name: 'save_memory',
-    description:
-      'Save important facts, decisions, or summaries to your persistent long-term memory. ' +
-      'Use this at the end of a conversation or when you learn something you need to remember for future chats.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        topic: {
-          type: 'string',
-          description: 'A short, safe filename for this memory (e.g., "case_strategy", "jenne_timeline").',
+    type: 'function',
+    function: {
+      name: 'convert_to_word',
+      description:
+        'Convert a .md or .txt file in legal/data/ to a Microsoft Word .docx file using pandoc. ' +
+        'The output file is saved in legal/data/ with the same base name but .docx extension. ' +
+        'Always do this AFTER creating or finishing edits to a document, when the user requests a Word file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The source .md or .txt filename to convert (e.g. "Motion_Strike.md").',
+          },
         },
-        content: {
-          type: 'string',
-          description: 'The detailed notes to save, written in Markdown.',
-        },
+        required: ['filename'],
       },
-      required: ['topic', 'content'],
     },
   },
   {
-    name: 'read_memory',
-    description: 'Read a specific memory file from your persistent long-term memory.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        topic: {
-          type: 'string',
-          description: 'The topic/filename of the memory to read (e.g., "case_strategy").',
+    type: 'function',
+    function: {
+      name: 'save_memory',
+      description:
+        'Save important facts, decisions, or summaries to your persistent long-term memory. ' +
+        'Use this at the end of a conversation or when you learn something you need to remember for future chats.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic: {
+            type: 'string',
+            description: 'A short, safe filename for this memory (e.g., "case_strategy", "jenne_timeline").',
+          },
+          content: {
+            type: 'string',
+            description: 'The detailed notes to save, written in Markdown.',
+          },
         },
+        required: ['topic', 'content'],
       },
-      required: ['topic'],
     },
   },
   {
-    name: 'list_memories',
-    description: 'List all topics currently stored in your persistent long-term memory.',
-    input_schema: {
-      type: 'object',
-      properties: {},
-      required: [],
+    type: 'function',
+    function: {
+      name: 'read_memory',
+      description: 'Read a specific memory file from your persistent long-term memory.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic: {
+            type: 'string',
+            description: 'The topic/filename of the memory to read (e.g., "case_strategy").',
+          },
+        },
+        required: ['topic'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_memories',
+      description: 'List all topics currently stored in your persistent long-term memory.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
     },
   },
 ];
@@ -296,10 +324,42 @@ function isStatusCommand(msg) {
 // ─── Streaming Agent Loop ────────────────────────────────────────────────────
 
 /**
+ * Helper to call OpenRouter API.
+ */
+async function callOpenRouter(messages, tools) {
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured in .env');
+
+  const url = "https://openrouter.ai/api/v1/chat/completions";
+  const headers = {
+    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json"
+  };
+  const payload = {
+    model: LEGAL_MODEL,
+    messages: messages,
+    tools: tools,
+    tool_choice: "auto"
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} ${errorText}`);
+  }
+
+  return await response.json();
+}
+
+/**
  * Run the Legal sub-agent for a given question.
  *
  * @param {string} question  The user's legal question.
- * @param {function} onChunk Callback called with each streamed text chunk (string).
+ * @param {function} onChunk Callback called with each text chunk.
  * @returns {Promise<{ answer: string, sources: string[] }>}
  */
 async function runLegalAgent(question, onChunk = () => { }) {
@@ -321,12 +381,11 @@ async function runLegalAgent(question, onChunk = () => { }) {
   }
 
   // ── Ensure document cache is loaded ──────────────────────────────────────
-  // Auto-initializes on first query; no-ops on subsequent queries.
   await legalTools.ensureInitialized();
 
   // ── Agentic tool-calling loop ─────────────────────────────────────────────
 
-  const messages = [{ role: 'user', content: question }];
+  let messages = [{ role: 'user', content: question }];
   const sources = new Set();
   let fullAnswer = '';
   let iterations = 0;
@@ -342,74 +401,61 @@ async function runLegalAgent(question, onChunk = () => { }) {
       currentSystemPrompt += `\n\n--- AUTO-INJECTED CORE MEMORY ---\n${coreMem}\n---------------------------------`;
     }
 
-    // Stream ALL turns for debugging visibility
-    const stream = await client.messages.stream({
-      model: LEGAL_MODEL,
-      max_tokens: 8192,
-      system: currentSystemPrompt,
-      tools: TOOLS,
-      messages,
-    });
+    const systemMsg = { role: 'system', content: currentSystemPrompt };
+    const conversation = [systemMsg, ...messages];
 
-    let iterText = '';
+    const data = await callOpenRouter(conversation, TOOLS);
+    const assistantMsg = data.choices[0].message;
 
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta') {
-        if (event.delta.type === 'text_delta') {
-          const chunk = event.delta.text;
-          iterText += chunk;
-          fullAnswer += chunk;
-          onChunk(chunk);
-        }
-      }
+    // Add assistant turn to history
+    messages.push(assistantMsg);
+
+    if (assistantMsg.content) {
+      onChunk(assistantMsg.content);
+      fullAnswer += assistantMsg.content;
     }
 
-    const finalMsg = await stream.finalMessage();
-
-    // Collect tool-use blocks
-    const toolUseBlocks = finalMsg.content.filter(b => b.type === 'tool_use');
-
-    // Push assistant turn
-    messages.push({ role: 'assistant', content: finalMsg.content });
-
     // If no tool calls, the agent is done
-    if (toolUseBlocks.length === 0) {
+    if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
       logger.info('[Legal] Agent finished (no more tool calls).');
       break;
     }
 
     // Execute tool calls
-    const toolResults = [];
-    for (const block of toolUseBlocks) {
-      logger.info(`[Legal] Tool call: ${block.name} ${JSON.stringify(block.input)}`);
+    for (const toolCall of assistantMsg.tool_calls) {
+      const { name, arguments: argsJson } = toolCall.function;
+      let args;
+      try {
+        args = JSON.parse(argsJson);
+      } catch (e) {
+        args = {};
+      }
 
-      const result = await legalTools.executeTool(block.name, block.input);
+      logger.info(`[Legal] Tool call: ${name} ${argsJson}`);
+      const result = await legalTools.executeTool(name, args);
 
       // Track sources from document tools
-      if (block.name === 'view_document' && result.filename) {
+      if (name === 'view_document' && result.filename) {
         sources.add(result.filename);
       }
-      if (block.name === 'grep_documents' && result.matches) {
+      if (name === 'grep_documents' && result.matches) {
         result.matches.forEach(m => sources.add(m.file));
       }
-      if (block.name === 'web_search' && result.results) {
+      if (name === 'web_search' && result.results) {
         result.results.forEach(r => sources.add(r.url));
       }
 
-      toolResults.push({
-        type: 'tool_result',
-        tool_use_id: block.id,
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        name: name,
         content: JSON.stringify(result),
       });
     }
-
-    messages.push({ role: 'user', content: toolResults });
   }
 
-  if (!fullAnswer) {
-    fullAnswer = iterations >= MAX_ITERATIONS
-      ? '⚠️ Legal agent reached the iteration limit. Try rephrasing your question.'
-      : '⚠️ No answer generated.';
+  if (!fullAnswer && iterations >= MAX_ITERATIONS) {
+    fullAnswer = '⚠️ Legal agent reached the iteration limit. Try rephrasing your question.';
     onChunk(fullAnswer);
   }
 
