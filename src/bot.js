@@ -11,6 +11,25 @@ const logger = require('./logger');
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const startTime = Date.now();
 
+// ─── API Error Formatter ────────────────────────────────────────────────────
+/**
+ * Convert raw API errors into user-friendly Telegram messages.
+ * Handles known conditions (low credits, rate limits) gracefully.
+ */
+function formatApiError(err) {
+  const msg = err.message || '';
+  if (msg.includes('credit balance is too low') || msg.includes('Your credit balance')) {
+    return '⚠️ Out of AI credits. Please go to https://console.anthropic.com/settings/billing to top up, then try again.';
+  }
+  if (msg.includes('rate_limit') || msg.includes('rate limit')) {
+    return '⚠️ AI rate limit reached. Please wait a moment and try again.';
+  }
+  if (msg.includes('overloaded')) {
+    return '⚠️ The AI is currently overloaded. Please try again in a few seconds.';
+  }
+  return `❌ Error: ${msg.slice(0, 200)}`;
+}
+
 // ─── Security Middleware ────────────────────────────────────────────────────
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
@@ -196,7 +215,7 @@ bot.on('text', async (ctx) => {
       // and legal queries can take several minutes across many tool iterations.
       streamLegalResponse(ctx, thinking.message_id, question).catch(err => {
         logger.error(`[Legal] Background stream error: ${err.message}`);
-        ctx.reply(`❌ Legal agent error: ${err.message}`).catch(() => {});
+        ctx.reply(formatApiError(err)).catch(() => {});
       });
       return;
     }
