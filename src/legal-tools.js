@@ -227,7 +227,11 @@ async function initLegalTools() {
 
     try {
       let text;
-      if (needsCache && isCacheFresh(filePath, cacheFile)) {
+      if (!needsCache) {
+        text = fs.readFileSync(filePath, 'utf-8');
+        cached++;
+        logger.info(`[Legal Tools] Loaded text: ${filename}`);
+      } else if (isCacheFresh(filePath, cacheFile)) {
         text = fs.readFileSync(cacheFile, 'utf-8');
         cached++;
         logger.info(`[Legal Tools] Cached: ${filename}`);
@@ -239,9 +243,7 @@ async function initLegalTools() {
           failed++;
           continue;
         }
-        if (needsCache) {
-          fs.writeFileSync(cacheFile, text, 'utf-8');
-        }
+        fs.writeFileSync(cacheFile, text, 'utf-8');
         extracted++;
       }
 
