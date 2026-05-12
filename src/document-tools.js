@@ -87,6 +87,8 @@ function validateWritableFilename(filename, allowedExts = WRITABLE_EXTS) {
   return { ok: true };
 }
 
+const instances = new Set();
+
 class DocumentManager {
   constructor(agentName) {
     this.agentName = agentName;
@@ -98,6 +100,7 @@ class DocumentManager {
     this._docIndex = new Map();
     this._initialized = false;
     this._initPromise = null;
+    instances.add(this);
   }
 
   async ensureInitialized() {
@@ -573,4 +576,19 @@ class DocumentManager {
   }
 }
 
-module.exports = { DocumentManager };
+async function refreshAllManagers() {
+  const results = [];
+  for (const manager of instances) {
+    try {
+      const summary = await manager.initTools();
+      // summary format is multiple lines, get the second line (x files loaded)
+      const lines = summary.split('\n');
+      results.push(`• <b>${manager.agentCap}:</b> ${lines[1] || 'Reloaded'}`);
+    } catch (err) {
+      results.push(`• <b>${manager.agentCap}:</b> Failed (${err.message})`);
+    }
+  }
+  return results.join('\n');
+}
+
+module.exports = { DocumentManager, refreshAllManagers };

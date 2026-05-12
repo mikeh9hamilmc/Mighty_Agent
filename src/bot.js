@@ -4,6 +4,7 @@ const { Telegraf } = require('telegraf');
 const { TELEGRAM_TOKEN, AUTHORIZED_USER_ID } = require('./config');
 const { runSkill } = require('./executor');
 const { decideAction, SKILLS, ALL_SKILLS } = require('./llm');
+const { refreshAllManagers } = require('./document-tools');
 const { runCoderAgent } = require('./coder-agent');
 const { runLegalAgent } = require('./legal-agent');
 const { runMedicalAgent } = require('./medical-agent');
@@ -93,6 +94,12 @@ bot.command('run', async (ctx) => {
   }
 
   await ctx.reply(`⚙️ Running skill \`${skillName}\`...`, { parse_mode: 'Markdown' });
+
+  if (skillName === 'refresh') {
+    const summary = await refreshAllManagers();
+    return ctx.reply(`🔄 *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
+  }
+
   const { output, exitCode, timedOut } = await runSkill(skillName, args);
 
   let result = '';
@@ -364,6 +371,12 @@ bot.on('text', async (ctx) => {
       `⚙️ Running skill \`${skill}\`${args.length ? ` with args: ${args.join(' ')}` : ''}...`,
       { parse_mode: 'Markdown' }
     );
+
+    if (skill === 'refresh') {
+      const summary = await refreshAllManagers();
+      await ctx.reply(`🔄 *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
+      return;
+    }
 
     const { output, exitCode, timedOut } = await runSkill(skill, args);
 
