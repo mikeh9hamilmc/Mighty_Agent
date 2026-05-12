@@ -6,7 +6,7 @@ const { DocumentManager } = require('./document-tools');
 const logger = require('./logger');
 
 async function main() {
-  logger.info('Starting Mini OpenClaw Agent...');
+  logger.info('Starting Mighty Agent...');
 
   // Pre-warm document caches in background (non-blocking).
   const legalTools = new DocumentManager('legal');

@@ -1,4 +1,4 @@
-# Mini OpenClaw Agent
+# Mighty Agent
 
 A Node.js-based personal agent that uses Claude LLM to interpret natural language via Telegram and execute local Python scripts via modular skills.
 

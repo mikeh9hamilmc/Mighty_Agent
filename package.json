@@ -1,7 +1,7 @@
 {
   "name": "python_agent",
   "version": "1.0.0",
-  "description": "Mini OpenClaw Agent — Telegram + Claude LLM Python script executor",
+  "description": "Mighty Agent — Telegram + Claude LLM Python script executor",
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
