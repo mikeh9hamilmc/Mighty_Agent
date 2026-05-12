@@ -74,7 +74,7 @@ function loadSkills() {
   }
 
   // Sub-agent skill folders don't have runnable scripts — exclude them from the skills list
-  const AGENT_FOLDERS = new Set(['legal', 'medical', 'finance', 'main', 'coder']);
+  const AGENT_FOLDERS = new Set(['legal', 'medical', 'finance', 'main', 'coder', 'travel']);
 
   const config = loadEnabledConfig();
   let configDirty = false;
@@ -252,25 +252,22 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'ask_agent',
-        description: 'Delegate the user\'s question to a specialized sub-agent. Use "legal" for law/court questions, "medical" for health/medical questions, "finance" for investing/tax/real estate questions, "coder" for programming tasks.',
-        parameters: {
-          type: 'object',
-          properties: {
-            agent: {
-              type: 'string',
-              enum: ['legal', 'medical', 'finance', 'coder'],
-              description: 'The specialized agent to delegate to.',
-            },
-            task: {
-              type: 'string',
-              description: 'The full user question or task to forward to the sub-agent.',
-            },
+      description: 'Delegate the question to a specialized sub-agent. This gives the sub-agent full autonomy to run a multi-step research loop using its own documents and memory.',
+      parameters: {
+        type: 'object',
+        properties: {
+          agent: {
+            type: 'string',
+            enum: ['legal', 'medical', 'finance', 'coder', 'travel'],
+            description: 'The specialized agent to use.'
           },
-          required: ['agent', 'task'],
+          task: { type: 'string', description: 'The specific task, question, or request for the sub-agent.' }
         },
+        required: ['agent', 'task'],
       },
-    },
-  ];
+    }
+  }
+];
 }
 
 // ─── OpenRouter helper ────────────────────────────────────────────────────────
@@ -405,7 +402,7 @@ async function decideAction(userMessage, onStatus = () => { }) {
         }
 
         if (name === 'ask_agent') {
-          const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder' };
+          const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder', travel: 'travel' };
           const type = agentMap[args.agent] || 'reply';
           if (type === 'reply') return { type: 'reply', text: "I wasn't sure which agent to use." };
 

@@ -34,20 +34,21 @@ async function main() {
     .catch(err => logger.warn(`[Finance Tools] Startup cache warning: ${err.message}`));
 
   const coderTools = new DocumentManager('coder');
-  coderTools.initTools()
-    .then(summary => {
-      const line2 = summary.split('\n')[1] || 'ready';
-      logger.info(`[Coder Tools] Startup: ${line2}`);
-    })
-    .catch(err => logger.warn(`[Coder Tools] Startup cache warning: ${err.message}`));
-
+  const travelTools = new DocumentManager('travel');
   const mainTools = new DocumentManager('main');
-  mainTools.initTools()
-    .then(summary => {
-      const line2 = summary.split('\n')[1] || 'ready';
-      logger.info(`[Main Tools] Startup: ${line2}`);
-    })
-    .catch(err => logger.warn(`[Main Tools] Startup cache warning: ${err.message}`));
+
+  Promise.all([
+    legalTools.initTools(),
+    medicalTools.initTools(),
+    financeTools.initTools(),
+    coderTools.initTools(),
+    travelTools.initTools(),
+    mainTools.initTools()
+  ]).then(() => {
+    logger.info('Document caches pre-warmed for all agents.');
+  }).catch(err => {
+    logger.error('Failed to pre-warm caches: ' + err.message);
+  });
 
   // Graceful shutdown
   process.once('SIGINT', () => {

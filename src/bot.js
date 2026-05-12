@@ -8,6 +8,7 @@ const { runCoderAgent } = require('./coder-agent');
 const { runLegalAgent } = require('./legal-agent');
 const { runMedicalAgent } = require('./medical-agent');
 const { runFinanceAgent } = require('./finance-agent');
+const { runTravelAgent } = require('./travel-agent');
 const logger = require('./logger');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
@@ -45,7 +46,7 @@ bot.use(async (ctx, next) => {
 // ─── /start ────────────────────────────────────────────────────────────────
 bot.start(async (ctx) => {
   await ctx.reply(
-    `👋 *Mini OpenClaw Agent* is online!\n\n` +
+    `👋 *Mighty Agent* is online!\n\n` +
     `Just send me a message in natural language and I'll figure out which skill to use.\n\n` +
     `*Commands:*\n` +
     `/list — show available skills\n` +
@@ -123,7 +124,7 @@ bot.command('status', async (ctx) => {
  */
 async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   let accumulated = '';
-  let lastEdit    = Date.now();
+  let lastEdit = Date.now();
   const EDIT_INTERVAL_MS = 800;
   const agentCap = agentName.charAt(0).toUpperCase() + agentName.slice(1);
 
@@ -154,6 +155,7 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
     else if (agentName === 'medical') runAgent = runMedicalAgent;
     else if (agentName === 'finance') runAgent = runFinanceAgent;
     else if (agentName === 'coder') runAgent = runCoderAgent;
+    else if (agentName === 'travel') runAgent = runTravelAgent;
 
     const result = await runAgent(question, (chunk) => {
       accumulated += chunk;
@@ -214,110 +216,119 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
 
 bot.on('text', async (ctx) => {
   try {
-  const rawMessage = ctx.message.text;
-  logger.info(`Message from ${ctx.from.id}: ${rawMessage}`);
+    const rawMessage = ctx.message.text;
+    logger.info(`Message from ${ctx.from.id}: ${rawMessage}`);
 
-  // ── "ask <agent>" prefix routing ──────────────────────────────────────────
-  // Supports: "ask legal ...", "ask legal, ...", "ask legal: ..."
-  const askMatch = rawMessage.match(/^ask\s+(\w+)[.,;:\s]+(.+)/is);
-  if (askMatch) {
-    const agentName = askMatch[1].toLowerCase();
-    const question  = askMatch[2].trim();
+    // ── "ask <agent>" prefix routing ──────────────────────────────────────────
+    // Supports: "ask legal ...", "ask legal, ...", "ask legal: ..."
+    const askMatch = rawMessage.match(/^ask\s+(\w+)[.,;:\s]+(.+)/is);
+    if (askMatch) {
+      const agentName = askMatch[1].toLowerCase();
+      const question = askMatch[2].trim();
 
-    if (agentName === 'legal') {
-      const thinking = await ctx.reply('⚖️ Legal is thinking...');
-      // Fire in background — do NOT await. Telegraf has a 90s handler timeout
-      // and agent queries can take several minutes across many tool iterations.
-      streamAgentResponse(ctx, thinking.message_id, question, 'legal').catch(err => {
+      if (agentName === 'legal') {
+        const thinking = await ctx.reply('⚖️ Legal is thinking...');
+        // Fire in background — do NOT await. Telegraf has a 90s handler timeout
+        // and agent queries can take several minutes across many tool iterations.
+        streamAgentResponse(ctx, thinking.message_id, question, 'legal').catch(err => {
+          logger.error(`[Legal] Background stream error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+        return;
+      }
+
+      if (agentName === 'medical') {
+        const thinking = await ctx.reply('🩺 Medical is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, question, 'medical').catch(err => {
+          logger.error(`[Medical] Background stream error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+        return;
+      }
+
+      if (agentName === 'finance') {
+        const thinking = await ctx.reply('💰 Finance is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, question, 'finance').catch(err => {
+          logger.error(`[Finance] Background stream error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+        return;
+      }
+
+      if (agentName === 'travel') {
+        const thinking = await ctx.reply('✈️ Travel is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, question, 'travel').catch(err => {
+          logger.error(`[Travel] Background stream error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+        return;
+      }
+
+      // Future agents: 'real-estate', etc.
+    }
+
+    const userMessage = rawMessage;
+
+    const thinking = await ctx.reply('🤔 Thinking...');
+    let lastStatus = '';
+
+    const decision = await decideAction(userMessage, (statusText) => {
+      if (statusText !== lastStatus) {
+        lastStatus = statusText;
+        ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, statusText).catch(() => { });
+      }
+    });
+
+    if (decision.type === 'reply') {
+      await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, decision.text);
+      return;
+    }
+
+    if (decision.type === 'error') {
+      await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, `❌ ${decision.text}`);
+      return;
+    }
+
+    // type === 'coder' — delegate to Coder sub-agent
+    if (decision.type === 'coder') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinking.message_id, undefined,
+        '🧑‍💻 Coder is thinking...'
+      );
+      streamAgentResponse(ctx, thinking.message_id, decision.task, 'coder').catch(err => {
+        logger.error(`[Coder] Background stream error: ${err.message}`);
+        ctx.reply(formatApiError(err)).catch(() => { });
+      });
+      return;
+    }
+
+    // type === 'legal' — delegate to Legal sub-agent
+    if (decision.type === 'legal') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinking.message_id, undefined,
+        '⚖️ Legal is thinking...'
+      );
+      // Fire in background — do NOT await (same timeout reason as above)
+      streamAgentResponse(ctx, thinking.message_id, decision.task, 'legal').catch(err => {
         logger.error(`[Legal] Background stream error: ${err.message}`);
-        ctx.reply(formatApiError(err)).catch(() => {});
+        ctx.reply(`❌ Legal agent error: ${err.message}`).catch(() => { });
       });
       return;
     }
 
-    if (agentName === 'medical') {
-      const thinking = await ctx.reply('🩺 Medical is thinking...');
-      streamAgentResponse(ctx, thinking.message_id, question, 'medical').catch(err => {
+    // type === 'medical' — delegate to Medical sub-agent
+    if (decision.type === 'medical') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinking.message_id, undefined,
+        '🩺 Medical is thinking...'
+      );
+      // Fire in background — do NOT await
+      streamAgentResponse(ctx, thinking.message_id, decision.task, 'medical').catch(err => {
         logger.error(`[Medical] Background stream error: ${err.message}`);
-        ctx.reply(formatApiError(err)).catch(() => {});
+        ctx.reply(`❌ Medical agent error: ${err.message}`).catch(() => { });
       });
       return;
     }
-
-    if (agentName === 'finance') {
-      const thinking = await ctx.reply('💰 Finance is thinking...');
-      streamAgentResponse(ctx, thinking.message_id, question, 'finance').catch(err => {
-        logger.error(`[Finance] Background stream error: ${err.message}`);
-        ctx.reply(formatApiError(err)).catch(() => {});
-      });
-      return;
-    }
-
-    // Future agents: 'real-estate', etc.
-  }
-
-  const userMessage = rawMessage;
-
-  const thinking = await ctx.reply('🤔 Thinking...');
-  let lastStatus = '';
-  
-  const decision = await decideAction(userMessage, (statusText) => {
-    if (statusText !== lastStatus) {
-      lastStatus = statusText;
-      ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, statusText).catch(() => {});
-    }
-  });
-
-  if (decision.type === 'reply') {
-    await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, decision.text);
-    return;
-  }
-
-  if (decision.type === 'error') {
-    await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, `❌ ${decision.text}`);
-    return;
-  }
-
-  // type === 'coder' — delegate to Coder sub-agent
-  if (decision.type === 'coder') {
-    await ctx.telegram.editMessageText(
-      ctx.chat.id, thinking.message_id, undefined,
-      '🧑‍💻 Coder is thinking...'
-    );
-    streamAgentResponse(ctx, thinking.message_id, decision.task, 'coder').catch(err => {
-      logger.error(`[Coder] Background stream error: ${err.message}`);
-      ctx.reply(formatApiError(err)).catch(() => {});
-    });
-    return;
-  }
-
-  // type === 'legal' — delegate to Legal sub-agent
-  if (decision.type === 'legal') {
-    await ctx.telegram.editMessageText(
-      ctx.chat.id, thinking.message_id, undefined,
-      '⚖️ Legal is thinking...'
-    );
-    // Fire in background — do NOT await (same timeout reason as above)
-    streamAgentResponse(ctx, thinking.message_id, decision.task, 'legal').catch(err => {
-      logger.error(`[Legal] Background stream error: ${err.message}`);
-      ctx.reply(`❌ Legal agent error: ${err.message}`).catch(() => {});
-    });
-    return;
-  }
-
-  // type === 'medical' — delegate to Medical sub-agent
-  if (decision.type === 'medical') {
-    await ctx.telegram.editMessageText(
-      ctx.chat.id, thinking.message_id, undefined,
-      '🩺 Medical is thinking...'
-    );
-    // Fire in background — do NOT await
-    streamAgentResponse(ctx, thinking.message_id, decision.task, 'medical').catch(err => {
-      logger.error(`[Medical] Background stream error: ${err.message}`);
-      ctx.reply(`❌ Medical agent error: ${err.message}`).catch(() => {});
-    });
-    return;
-  }
     // type === 'finance' — delegate to Finance sub-agent
     if (decision.type === 'finance') {
       await ctx.telegram.editMessageText(
@@ -327,32 +338,45 @@ bot.on('text', async (ctx) => {
       // Fire in background
       streamAgentResponse(ctx, thinking.message_id, decision.task, 'finance').catch(err => {
         logger.error(`[Finance] Background stream error: ${err.message}`);
-        ctx.reply(`❌ Finance agent error: ${err.message}`).catch(() => {});
+        ctx.reply(`❌ Finance agent error: ${err.message}`).catch(() => { });
       });
       return;
     }
 
-  // type === 'run'
-  const { skill, args } = decision;
+    // type === 'travel' — delegate to Travel sub-agent
+    if (decision.type === 'travel') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinking.message_id, undefined,
+        '✈️ Travel is thinking...'
+      );
+      streamAgentResponse(ctx, thinking.message_id, decision.task, 'travel').catch(err => {
+        logger.error(`[Travel] Background stream error: ${err.message}`);
+        ctx.reply(`❌ Travel agent error: ${err.message}`).catch(() => { });
+      });
+      return;
+    }
 
-  await ctx.telegram.editMessageText(
-    ctx.chat.id, thinking.message_id, undefined,
-    `⚙️ Running skill \`${skill}\`${args.length ? ` with args: ${args.join(' ')}` : ''}...`,
-    { parse_mode: 'Markdown' }
-  );
+    // type === 'run'
+    const { skill, args } = decision;
 
-  const { output, exitCode, timedOut } = await runSkill(skill, args);
+    await ctx.telegram.editMessageText(
+      ctx.chat.id, thinking.message_id, undefined,
+      `⚙️ Running skill \`${skill}\`${args.length ? ` with args: ${args.join(' ')}` : ''}...`,
+      { parse_mode: 'Markdown' }
+    );
 
-  let result = `✅ \`${skill}\`\n\n`;
-  if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
-  result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
-  if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
+    const { output, exitCode, timedOut } = await runSkill(skill, args);
 
-  await ctx.reply(result, { parse_mode: 'Markdown' });
+    let result = `✅ \`${skill}\`\n\n`;
+    if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
+    result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
+    if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
+
+    await ctx.reply(result, { parse_mode: 'Markdown' });
 
   } catch (err) {
     logger.error(`[Bot] Unhandled text handler error: ${err.message}`);
-    try { await ctx.reply(`❌ Unexpected error: ${err.message}`); } catch (_) {}
+    try { await ctx.reply(`❌ Unexpected error: ${err.message}`); } catch (_) { }
   }
 });
 
@@ -361,7 +385,7 @@ bot.on('text', async (ctx) => {
 bot.catch((err, ctx) => {
   logger.error(`[Bot] Global error for update ${ctx?.update?.update_id}: ${err.message}`);
   if (ctx) {
-    ctx.reply(`❌ Something went wrong: ${err.message}`).catch(() => {});
+    ctx.reply(`❌ Something went wrong: ${err.message}`).catch(() => { });
   }
 });
 
