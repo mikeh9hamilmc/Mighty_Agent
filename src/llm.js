@@ -53,7 +53,8 @@ function loadSkills() {
   }
 
   // Sub-agent skill folders don't have runnable scripts — exclude them from the skills list
-  const AGENT_FOLDERS = new Set(['legal', 'medical', 'finance', 'main']);
+  const AGENT_FOLDERS = new Set(['legal', 'medical', 'finance', 'main', 'coder']);
+
   const skills = [];
 
   for (const entry of fs.readdirSync(SKILLS_DIR, { withFileTypes: true })) {
@@ -212,13 +213,13 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'ask_agent',
-        description: 'Delegate the user\'s question to a specialized sub-agent. Use "legal" for law/court questions, "medical" for health/medical questions, "finance" for investing/tax/real estate questions, "code" for programming tasks.',
+        description: 'Delegate the user\'s question to a specialized sub-agent. Use "legal" for law/court questions, "medical" for health/medical questions, "finance" for investing/tax/real estate questions, "coder" for programming tasks.',
         parameters: {
           type: 'object',
           properties: {
             agent: {
               type: 'string',
-              enum: ['legal', 'medical', 'finance', 'code'],
+              enum: ['legal', 'medical', 'finance', 'coder'],
               description: 'The specialized agent to delegate to.',
             },
             task: {
@@ -285,7 +286,7 @@ You have access to:
    • "legal"   — law, court cases, contracts, attorneys, property disputes
    • "medical" — health, lab results, symptoms, prescriptions, doctor notes
    • "finance" — investing, UPRO/ETF strategy, real estate, taxes, CPA advice
-   • "code"    — writing Python scripts, creating new agent skills, programming tasks
+   • "coder"    — writing Python scripts, creating new agent skills, programming tasks
 3. Runnable Python skills on the user's machine.
 
 Workflow:
@@ -313,7 +314,7 @@ MEMORY RULES (CRITICAL — never break these):
  *   { type: 'finance', task: '...' }
  *   { type: 'error',   text: '...' }
  */
-async function decideAction(userMessage, onStatus = () => {}) {
+async function decideAction(userMessage, onStatus = () => { }) {
   const TOOLS = buildTools();
 
   let coreMemory = '';
@@ -365,7 +366,7 @@ async function decideAction(userMessage, onStatus = () => {}) {
         }
 
         if (name === 'ask_agent') {
-          const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', code: 'code' };
+          const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder' };
           const type = agentMap[args.agent] || 'reply';
           if (type === 'reply') return { type: 'reply', text: "I wasn't sure which agent to use." };
           return { type, task: args.task };

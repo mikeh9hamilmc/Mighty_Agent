@@ -147,6 +147,7 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
     if (agentName === 'legal') runAgent = runLegalAgent;
     else if (agentName === 'medical') runAgent = runMedicalAgent;
     else if (agentName === 'finance') runAgent = runFinanceAgent;
+    else if (agentName === 'coder') runAgent = runCoderAgent;
 
     const result = await runAgent(question, (chunk) => {
       accumulated += chunk;
@@ -271,22 +272,16 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // type === 'code' — delegate to Coder sub-agent
-  if (decision.type === 'code') {
+  // type === 'coder' — delegate to Coder sub-agent
+  if (decision.type === 'coder') {
     await ctx.telegram.editMessageText(
       ctx.chat.id, thinking.message_id, undefined,
-      '🧑‍💻 Consulting the Coder sub-agent... this may take a moment.'
+      '🧑‍💻 Coder is thinking...'
     );
-
-    const { summary, filesCreated } = await runCoderAgent(decision.task);
-
-    let result = summary;
-    if (filesCreated.length > 0) {
-      result += `\n\n📁 *Files created/updated:*\n${filesCreated.map(f => `\`${f}\``).join('\n')}`;
-      result += '\n\n⚠️ *Restart the agent to load any new skills.*';
-    }
-
-    await ctx.reply(result, { parse_mode: 'Markdown' });
+    streamAgentResponse(ctx, thinking.message_id, decision.task, 'coder').catch(err => {
+      logger.error(`[Coder] Background stream error: ${err.message}`);
+      ctx.reply(formatApiError(err)).catch(() => {});
+    });
     return;
   }
 
