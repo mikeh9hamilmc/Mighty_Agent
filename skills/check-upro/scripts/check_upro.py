@@ -51,6 +51,8 @@ def check_upro_position():
                     import shutil
                     try:
                         shutil.copy(LEDGER_FILE + '.example', LEDGER_FILE)
+                        print(f"\n⚠️  NOTICE: Created '{LEDGER_FILE}' from example. The data below is SAMPLE DATA.")
+                        print(f"   Please update the file with your actual purchase history.")
                     except:
                         pass
 

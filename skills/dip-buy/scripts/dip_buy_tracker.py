@@ -38,13 +38,17 @@ def save_config(config):
 def update_ledger(shares, price):
     """Append a purchase to the ledger."""
     # Ensure ledger exists (copy from example if missing)
-    if not os.path.exists(LEDGER_FILE):
-        if os.path.exists(LEDGER_FILE + '.example'):
-            import shutil
+    if not os.path.exists(LEDGER_FILE) and os.path.exists(LEDGER_FILE + '.example'):
+        import shutil
+        try:
             shutil.copy(LEDGER_FILE + '.example', LEDGER_FILE)
-        else:
-            with open(LEDGER_FILE, 'w') as f:
-                json.dump([], f)
+            print(f"\n⚠️  NOTICE: Created '{LEDGER_FILE}' from example. The data below is SAMPLE DATA.")
+            print(f"   Please update the file with your actual purchase history.")
+        except:
+            pass
+    elif not os.path.exists(LEDGER_FILE):
+        with open(LEDGER_FILE, 'w') as f:
+            json.dump([], f)
                 
     try:
         with open(LEDGER_FILE, 'r') as f:
