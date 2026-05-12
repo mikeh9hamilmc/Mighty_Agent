@@ -200,7 +200,7 @@ const TOOLS = [
 function resolveSafe(relativePath) {
   const resolved = path.resolve(SKILLS_DIR, relativePath);
   if (!resolved.startsWith(path.resolve(SKILLS_DIR))) {
-    throw new Error(\`Path traversal detected: "\${relativePath}" is outside the skills/ directory.\`);
+    throw new Error('Path traversal detected: "' + relativePath + '" is outside the skills/ directory.');
   }
   return resolved;
 }
@@ -210,7 +210,7 @@ function toolWriteFile({ relative_path, content }) {
     const absPath = resolveSafe(relative_path);
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
     fs.writeFileSync(absPath, content, 'utf-8');
-    logger.info(\`[Coder] Wrote file: \${absPath}\`);
+    logger.info('[Coder] Wrote file: ' + absPath);
     return { success: true, path: absPath };
   } catch (err) {
     return { success: false, error: err.message };
@@ -223,10 +223,10 @@ function toolExecutePython({ relative_path, args = [] }) {
     try { absPath = resolveSafe(relative_path); } catch (err) { return resolve({ success: false, error: err.message }); }
 
     if (!fs.existsSync(absPath)) {
-      return resolve({ success: false, error: \`File not found: \${absPath}\` });
+      return resolve({ success: false, error: 'File not found: ' + absPath });
     }
 
-    logger.info(\`[Coder] Executing: \${PYTHON_CMD} \${absPath} \${args.join(' ')}\`);
+    logger.info('[Coder] Executing: ' + PYTHON_CMD + ' ' + absPath + ' ' + args.join(' '));
     const child = spawn(PYTHON_CMD, [absPath, ...args], {
       cwd: path.dirname(absPath),
       env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
@@ -260,15 +260,15 @@ function toolExecutePython({ relative_path, args = [] }) {
 async function callOpenRouter(messages, tools) {
   if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured in .env');
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { "Authorization": \`Bearer \${OPENROUTER_API_KEY}\`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: CODER_MODEL, messages, tools, tool_choice: "auto" })
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + OPENROUTER_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: CODER_MODEL, messages, tools, tool_choice: 'auto' })
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(\`OpenRouter API error: \${response.status} \${errorText}\`);
+    throw new Error('OpenRouter API error: ' + response.status + ' ' + errorText);
   }
   return await response.json();
 }
@@ -281,10 +281,10 @@ function isReadCommand(text) {
 // ─── Main Agent Loop ──────────────────────────────────────────────────────────
 
 async function runCoderAgent(question, onChunk = () => {}) {
-  logger.info(\`[Coder] Starting task: \${question}\`);
+  logger.info('[Coder] Starting task: ' + question);
 
   if (isReadCommand(question)) {
-    onChunk('📂 Scanning and caching documents...\\n');
+    onChunk('📂 Scanning and caching documents...\n');
     const summary = await coderTools.initTools();
     onChunk(summary);
     return { answer: summary, sources: [] };
@@ -300,12 +300,12 @@ async function runCoderAgent(question, onChunk = () => {}) {
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
-    logger.info(\`[Coder] Iteration \${iterations}/\${MAX_ITERATIONS}\`);
+    logger.info('[Coder] Iteration ' + iterations + '/' + MAX_ITERATIONS);
 
     let currentSystemPrompt = SYSTEM_PROMPT;
     const coreMem = coderTools.getCoreMemory();
     if (coreMem) {
-      currentSystemPrompt += \`\\n\\n--- AUTO-INJECTED CORE MEMORY ---\\n\${coreMem}\\n---------------------------------\`;
+      currentSystemPrompt += '\n\n--- AUTO-INJECTED CORE MEMORY ---\n' + coreMem + '\n---------------------------------';
     }
 
     const systemMsg = { role: 'system', content: currentSystemPrompt };
@@ -330,8 +330,8 @@ async function runCoderAgent(question, onChunk = () => {}) {
       let args = {};
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
 
-      logger.info(\`[Coder] Tool call: \${name} \${argsJson}\`);
-      
+      logger.info('[Coder] Tool call: ' + name + ' ' + argsJson);
+
       let result;
       if (name === 'write_file') {
         result = toolWriteFile(args);
@@ -339,7 +339,6 @@ async function runCoderAgent(question, onChunk = () => {}) {
       } else if (name === 'execute_python') {
         result = await toolExecutePython(args);
       } else {
-        // Delegate to DocumentManager for grep, view, memory, web_search, etc.
         result = await coderTools.executeTool(name, args);
       }
 
@@ -362,12 +361,12 @@ async function runCoderAgent(question, onChunk = () => {}) {
   }
 
   if (filesCreated.length > 0) {
-    const fileMsg = \`\\n\\n📁 **Files created/updated:**\\n\${filesCreated.map(f => \`\\\`\${f}\\\`\`).join('\\n')}\\n\\n⚠️ *Restart the agent to load new skills.*\`;
+    const fileMsg = '\n\n📁 **Files created/updated:**\n' + filesCreated.map(f => '`' + f + '`').join('\n') + '\n\n⚠️ *Restart the agent to load new skills.*';
     onChunk(fileMsg);
     fullAnswer += fileMsg;
   }
 
-  logger.info(\`[Coder] Done. Sources: \${[...sources].join(', ') || 'none'}\`);
+  logger.info('[Coder] Done. Sources: ' + ([...sources].join(', ') || 'none'));
   return { answer: fullAnswer, sources: [...sources] };
 }
 
