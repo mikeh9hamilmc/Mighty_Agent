@@ -79,6 +79,7 @@ bot.command('refresh', async (ctx) => {
   await ctx.reply('🔄 Refreshing all agent data and memory...');
   try {
     const summary = await refreshAllManagers();
+    await syncTelegramCommands();
     await ctx.reply(`✅ *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
   } catch (err) {
     logger.error(`[Refresh] Failed: ${err.message}`);
@@ -104,6 +105,34 @@ function registerSkillCommands() {
   }
 }
 registerSkillCommands();
+
+// ─── Telegram Command Menu Sync ──────────────────────────────────────────────────────
+/**
+ * Push the current command list to Telegram so the / menu stays in sync.
+ * Called at startup and after /refresh.
+ */
+async function syncTelegramCommands() {
+  const systemCommands = [
+    { command: 'start',   description: 'Show welcome message and command list' },
+    { command: 'list',    description: 'List all available skills' },
+    { command: 'refresh', description: 'Reload all agent data and memory' },
+    { command: 'status',  description: 'Show bot uptime and system info' },
+  ];
+
+  const skillCommands = SKILLS.map(s => ({
+    command: s.name,
+    description: s.description.slice(0, 256), // Telegram max is 256 chars
+  }));
+
+  const allCommands = [...systemCommands, ...skillCommands];
+
+  try {
+    await bot.telegram.setMyCommands(allCommands);
+    logger.info(`[Bot] Synced ${allCommands.length} commands to Telegram menu.`);
+  } catch (err) {
+    logger.error(`[Bot] Failed to sync Telegram commands: ${err.message}`);
+  }
+}
 
 // ─── /status ────────────────────────────────────────────────────────────────
 bot.command('status', async (ctx) => {
@@ -392,3 +421,4 @@ bot.catch((err, ctx) => {
 });
 
 module.exports = bot;
+module.exports.syncTelegramCommands = syncTelegramCommands;
