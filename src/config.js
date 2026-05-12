@@ -29,13 +29,5 @@ module.exports = {
   PYTHON_CMD:         process.env.PYTHON_CMD || 'python',
   SCRIPT_TIMEOUT_MS:  parseInt(process.env.SCRIPT_TIMEOUT_SEC || '60', 10) * 1000,
   SKILLS_DIR,
-  // Legal sub-agent
-  BRAVE_API_KEY:    optional('BRAVE_API_KEY'),
-  LEGAL_DATA_DIR:   path.resolve(SKILLS_DIR, 'legal', 'data'),
-  LEGAL_CACHE_DIR:  path.resolve(SKILLS_DIR, 'legal', 'data', '.legal-cache'),
-  LEGAL_MEMORY_DIR: path.resolve(SKILLS_DIR, 'legal', 'memory'),
-  // Finance sub-agent
-  FINANCE_DATA_DIR:   path.resolve(SKILLS_DIR, 'finance', 'data'),
-  FINANCE_CACHE_DIR:  path.resolve(SKILLS_DIR, 'finance', 'data', '.finance-cache'),
-  FINANCE_MEMORY_DIR: path.resolve(SKILLS_DIR, 'finance', 'memory'),
+  BRAVE_API_KEY: optional('BRAVE_API_KEY'), // Used by all agents via DocumentManager.toolWebSearch
 };

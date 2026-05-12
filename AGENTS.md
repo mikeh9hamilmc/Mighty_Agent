@@ -14,9 +14,11 @@ The system is built as a modular Node.js application that bridges the gap betwee
     - **Security Middleware**: Validates every incoming message against the `AUTHORIZED_USER_ID`. Unauthorized messages are silently ignored.
     - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/run`, and `/status`.
     - **Natural Language Handler**: Routes all non-command text messages to the LLM layer.
-- **`src/llm.js`**: Interfaces with the OpenRouter API (`@preset/mighty-agent-main`).
-    - **Skill Discovery**: Dynamically scans the `skills/` directory and parses `SKILL.md` files to build the LLM's tool context.
-    - **Decision Logic**: The LLM decides whether to respond conversationally or to trigger a skill execution based on user intent.
+- **`src/llm.js`**: Orchestrates the Main Agent using the OpenRouter API (`@preset/mighty-agent-main`).
+    - **Agentic Loop**: Runs a tool-calling loop (up to 10 iterations) instead of a one-shot call.
+    - **Document & Memory Access**: Uses `DocumentManager` to access `skills/main/data/` and `skills/main/memory/`, giving the main agent its own persistent context.
+    - **Routing Tools**: `run_skill` (delegates to Python executor) and `ask_agent` (delegates to legal/medical/finance/code sub-agents) are real tool calls in the loop.
+    - **Skill Discovery**: Dynamically scans the `skills/` directory, excluding sub-agent folders (main/legal/medical/finance).
 - **`src/executor.js`**: Handles the actual execution of Python scripts within skills.
     - **Resolution**: Dynamically resolves the entry-point script for a given skill.
     - **Security**: Sanitizes names and enforces path restrictions.
@@ -66,6 +68,18 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 4.  Restart the agent to allow it to discover the new skill.
 
 ## Change Log
+
+### 2026-05-12
+- **Main Agent Refactor — Agentic Loop**: Refactored `llm.js` from a one-shot JSON router to a full agentic tool-calling loop.
+    - Created `skills/main/data/` and `skills/main/memory/` for the main agent's own document and persistent memory storage.
+    - Added document tools (`list_documents`, `grep_documents`, `view_document`) backed by `DocumentManager`.
+    - Added memory tools (`save_memory`, `read_memory`, `list_memories`) with auto-injected `core_memory.md`.
+    - Routing tools (`run_skill`, `ask_agent`) replace the fragile JSON-response pattern, making sub-agent delegation a true tool call.
+    - Skill discovery now excludes sub-agent folders (`main/legal/medical/finance`) to avoid surfacing them as runnable Python skills.
+- **Finance Agent — New Sub-Agent**: Implemented a specialized Finance sub-agent (`src/finance-agent.js`) for stock investing, real estate, and tax analysis.
+    - Added prefix-based routing (`ask finance ...`) and automatic intent detection in the main LLM router.
+    - Created `skills/finance/` directory structure with isolated data and memory storage.
+    - Integrated sophisticated financial strategy guidelines (UPRO ETF, Real Estate CAGR analysis, CPA tax knowledge) into the system prompt.
 
 ### 2026-05-11
 - **Medical Agent — OpenRouter Migration**: Migrated the Medical sub-agent from the direct Anthropic SDK to OpenRouter API using the `@preset/mighty-agent-medical` model.
