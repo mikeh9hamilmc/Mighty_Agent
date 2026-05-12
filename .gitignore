@@ -18,4 +18,4 @@ skills/legal/data/.legal-cache/
 
 # Ignore local skill configurations and history
 skills/dip-buy/scripts/dip_buy_config.json
-skills/dip-buy/scripts/upro_history.csv
+#skills/dip-buy/scripts/upro_history.csv
