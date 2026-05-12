@@ -3,7 +3,7 @@
 const { Telegraf } = require('telegraf');
 const { TELEGRAM_TOKEN, AUTHORIZED_USER_ID } = require('./config');
 const { runSkill } = require('./executor');
-const { decideAction, SKILLS } = require('./llm');
+const { decideAction, SKILLS, ALL_SKILLS } = require('./llm');
 const { runCoderAgent } = require('./coder-agent');
 const { runLegalAgent } = require('./legal-agent');
 const { runMedicalAgent } = require('./medical-agent');
@@ -58,11 +58,17 @@ bot.start(async (ctx) => {
 
 // ─── /list ──────────────────────────────────────────────────────────────────
 bot.command('list', async (ctx) => {
-  if (SKILLS.length === 0) {
+  if (ALL_SKILLS.length === 0) {
     return ctx.reply('📂 No skills found in the skills/ directory yet.');
   }
-  const lines = SKILLS.map(s => `🔧 *${s.name}*\n   ${s.description}`);
-  await ctx.reply(`*Available Skills:*\n\n${lines.join('\n\n')}`, { parse_mode: 'Markdown' });
+  const lines = ALL_SKILLS.map(s => {
+    const icon = s.enabled ? '✅' : '⛔';
+    return icon + ' *' + s.name + '*\n   ' + s.description;
+  });
+  const enabled = ALL_SKILLS.filter(s => s.enabled).length;
+  const total = ALL_SKILLS.length;
+  const header = '*Skills (' + enabled + '/' + total + ' enabled):*';
+  await ctx.reply(header + '\n\n' + lines.join('\n\n'), { parse_mode: 'Markdown' });
 });
 
 // ─── /run ───────────────────────────────────────────────────────────────────

@@ -46,20 +46,43 @@ function parseFrontmatter(content) {
   return result;
 }
 
+function loadEnabledConfig() {
+  const configPath = path.join(SKILLS_DIR, 'enabled_skills.json');
+  try {
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+  } catch (err) {
+    logger.warn('Failed to read enabled_skills.json: ' + err.message);
+  }
+  return { skills: {} };
+}
+
+function saveEnabledConfig(config) {
+  const configPath = path.join(SKILLS_DIR, 'enabled_skills.json');
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  } catch (err) {
+    logger.warn('Failed to write enabled_skills.json: ' + err.message);
+  }
+}
+
 function loadSkills() {
   if (!fs.existsSync(SKILLS_DIR)) {
-    logger.warn(`Skills directory not found: ${SKILLS_DIR}`);
+    logger.warn('Skills directory not found: ' + SKILLS_DIR);
     return [];
   }
 
   // Sub-agent skill folders don't have runnable scripts — exclude them from the skills list
   const AGENT_FOLDERS = new Set(['legal', 'medical', 'finance', 'main', 'coder']);
 
-  const skills = [];
+  const config = loadEnabledConfig();
+  let configDirty = false;
+  const allSkills = [];
 
   for (const entry of fs.readdirSync(SKILLS_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    if (AGENT_FOLDERS.has(entry.name)) continue; // skip sub-agent folders
+    if (AGENT_FOLDERS.has(entry.name)) continue;
 
     const skillMdPath = path.join(SKILLS_DIR, entry.name, 'SKILL.md');
     if (!fs.existsSync(skillMdPath)) continue;
@@ -68,29 +91,45 @@ function loadSkills() {
       const content = fs.readFileSync(skillMdPath, 'utf-8');
       const fm = parseFrontmatter(content);
       if (!fm || !fm.name || !fm.description) {
-        logger.warn(`Skipping skill "${entry.name}": SKILL.md missing name or description`);
+        logger.warn('Skipping skill "' + entry.name + '": SKILL.md missing name or description');
         continue;
       }
-      skills.push({
+
+      // Auto-register new skills into enabled_skills.json
+      if (!config.skills[fm.name]) {
+        config.skills[fm.name] = { enabled: true, description: fm.description };
+        configDirty = true;
+        logger.info('Auto-registered new skill in enabled_skills.json: ' + fm.name);
+      }
+
+      allSkills.push({
         name: fm.name,
         description: fm.description,
         scriptDir: path.join(SKILLS_DIR, entry.name, 'scripts'),
+        enabled: config.skills[fm.name]?.enabled !== false,
       });
     } catch (err) {
-      logger.warn(`Failed to read SKILL.md for "${entry.name}": ${err.message}`);
+      logger.warn('Failed to read SKILL.md for "' + entry.name + '": ' + err.message);
     }
   }
 
-  return skills;
+  if (configDirty) saveEnabledConfig(config);
+  return allSkills;
 }
 
-const SKILLS = loadSkills();
+const ALL_SKILLS = loadSkills();
+const SKILLS = ALL_SKILLS.filter(s => s.enabled);
 
 if (SKILLS.length === 0) {
-  logger.warn('No runnable skills found in the skills/ directory.');
+  logger.warn('No enabled skills found in the skills/ directory.');
 } else {
-  logger.info(`Loaded ${SKILLS.length} skill(s): ${SKILLS.map(s => s.name).join(', ')}`);
+  logger.info('Loaded ' + SKILLS.length + ' skill(s): ' + SKILLS.map(s => s.name).join(', '));
+  const disabled = ALL_SKILLS.filter(s => !s.enabled);
+  if (disabled.length > 0) {
+    logger.info('Disabled skill(s): ' + disabled.map(s => s.name).join(', '));
+  }
 }
+
 
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
 
@@ -399,4 +438,4 @@ async function decideAction(userMessage, onStatus = () => { }) {
   }
 }
 
-module.exports = { decideAction, loadSkills, SKILLS };
+module.exports = { decideAction, loadSkills, SKILLS, ALL_SKILLS };
