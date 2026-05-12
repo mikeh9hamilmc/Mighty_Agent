@@ -60,17 +60,22 @@ bot.start(async (ctx) => {
 });
 
 // ─── /list ──────────────────────────────────────────────────────────────────
+// Escape characters that Telegram's Markdown v1 parser treats as special.
+function mdEscape(str) {
+  return str.replace(/[_*[\]`]/g, '\\$&');
+}
+
 bot.command('list', async (ctx) => {
   if (ALL_SKILLS.length === 0) {
     return ctx.reply('📂 No skills found in the skills/ directory yet.');
   }
   const lines = ALL_SKILLS.map(s => {
     const icon = s.enabled ? '✅' : '⛔';
-    return icon + ' *' + s.name + '* — /' + s.name + '\n   ' + s.description;
+    return `${icon} *${mdEscape(s.name)}* — /${s.name}\n   ${mdEscape(s.description)}`;
   });
   const enabled = ALL_SKILLS.filter(s => s.enabled).length;
   const total = ALL_SKILLS.length;
-  const header = '*Skills (' + enabled + '/' + total + ' enabled):*';
+  const header = `*Skills (${enabled}/${total} enabled):*`;
   await ctx.reply(header + '\n\n' + lines.join('\n\n'), { parse_mode: 'Markdown' });
 });
 
