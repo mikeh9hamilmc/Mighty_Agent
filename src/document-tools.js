@@ -526,26 +526,55 @@ class DocumentManager {
 
   toolReadMemory({ topic }) {
     this.ensureMemoryDir();
-    const safeTopic = topic.replace(/[^a-z0-9_-]/gi, '_');
+    const safeTopic = topic.replace(/[^a-z0-9_.-]/gi, '_');
     const filename = topic.endsWith('.md') ? topic : `${safeTopic}.md`;
     const filePath = path.join(this.memoryDir, filename);
 
-    if (!fs.existsSync(filePath)) return { error: `Memory file "${filename}" not found.` };
-
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return { filename, content };
-    } catch (err) {
-      return { error: `Failed to read memory: ${err.message}` };
+    // Check own memory first
+    if (fs.existsSync(filePath)) {
+      try {
+        return { filename, content: fs.readFileSync(filePath, 'utf-8') };
+      } catch (err) {
+        return { error: `Failed to read memory: ${err.message}` };
+      }
     }
+
+    // Fallback: check global main memory for sub-agents
+    if (this.agentName !== 'main') {
+      const globalPath = path.join(path.resolve(SKILLS_DIR, 'main', 'memory'), filename);
+      if (fs.existsSync(globalPath)) {
+        try {
+          const content = fs.readFileSync(globalPath, 'utf-8');
+          logger.debug(`[${this.agentCap} Memory] Read from global memory: ${filename}`);
+          return { filename, source: 'global', content };
+        } catch (err) {
+          return { error: `Failed to read global memory: ${err.message}` };
+        }
+      }
+    }
+
+    return { error: `Memory file "${filename}" not found in ${this.agentName} or global memory.` };
   }
 
   toolListMemories() {
     this.ensureMemoryDir();
     try {
-      const files = fs.readdirSync(this.memoryDir).filter(f => f.endsWith('.md'));
-      if (files.length === 0) return { message: 'Memory folder is empty.' };
-      return { files };
+      const ownFiles = fs.readdirSync(this.memoryDir).filter(f => f.endsWith('.md'));
+
+      // For sub-agents, also list global main memory files
+      let globalFiles = [];
+      if (this.agentName !== 'main') {
+        const mainMemDir = path.resolve(SKILLS_DIR, 'main', 'memory');
+        if (fs.existsSync(mainMemDir)) {
+          globalFiles = fs.readdirSync(mainMemDir).filter(f => f.endsWith('.md'));
+        }
+      }
+
+      const result = {};
+      if (ownFiles.length > 0) result.own_memories = ownFiles;
+      if (globalFiles.length > 0) result.global_memories = globalFiles;
+      if (ownFiles.length === 0 && globalFiles.length === 0) return { message: 'No memory files found.' };
+      return result;
     } catch (err) {
       return { error: `Failed to list memories: ${err.message}` };
     }
