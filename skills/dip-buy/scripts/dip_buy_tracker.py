@@ -101,15 +101,27 @@ def get_current_position():
     return 0, 0
 
 def execute_buy(shares, price):
-    """Execute a buy order."""
+    """Execute a buy order and wait for it to fill."""
     contract = Stock('UPRO', 'SMART', 'USD')
     ib.qualifyContracts(contract)
     
-    order = LimitOrder('BUY', shares, price)
+    # Round price to 2 decimal places for IBKR
+    limit_price = round(price, 2)
+    order = LimitOrder('BUY', shares, limit_price)
     order.outsideRth = True
     trade = ib.placeOrder(contract, order)
     
-    ib.sleep(2)
+    print(f"   Order placed: {shares} shares @ ${limit_price:.2f}. Waiting for fill...")
+    
+    # Wait up to 60 seconds for the order to fill
+    for _ in range(60):
+        ib.sleep(1)
+        if trade.orderStatus.status == 'Filled':
+            return True
+        if trade.orderStatus.status in ['Cancelled', 'Inactive', 'ApiCancelled']:
+            return False
+            
+    # If still not filled after 60s, return status
     return trade.orderStatus.status == 'Filled'
 
 def check_dip_buys(silent=False):
@@ -165,17 +177,18 @@ def check_dip_buys(silent=False):
                 msg += "Executing buy..."
                 print(msg)
                 
-                # Execute buy
-                success = execute_buy(shares_to_buy, current_price)
+                # Execute buy with a limit slightly below current to get a better fill/price
+                limit_price = current_price - 0.10
+                success = execute_buy(shares_to_buy, limit_price)
                 
                 if success:
-                    # Update config
-                    config['last_buy_price'] = current_price
+                    # Update config with the ACTUAL price we targeted
+                    config['last_buy_price'] = limit_price
                     config['last_buy_shares'] = shares_to_buy
                     config['last_buy_date'] = datetime.now().strftime('%Y-%m-%d')
                     save_config(config)
                     
-                    final_msg = f"✅ BUY EXECUTED!\n\n{shares_to_buy} shares @ ${current_price:.2f}\nTotal: ${cost:,.2f}"
+                    final_msg = f"✅ BUY EXECUTED!\n\n{shares_to_buy} shares @ ${limit_price:.2f}\nTotal: ${shares_to_buy * limit_price:,.2f}"
                     print(final_msg)
                 else:
                     err_msg = f"❌ Buy failed!"
