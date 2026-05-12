@@ -115,6 +115,7 @@ Rules:
 4. When uncertain whether to invoke a skill, prefer replying conversationally and asking for clarification.
 5. When the user asks anything related to law, legal documents, statutes, court cases, criminal charges, divorce, custody, marriage, property disputes, lawsuits, attorneys, or anything that sounds like a legal question — use the legal action.
 6. When the user asks about health, medical records, doctors, symptoms, lab results, prescriptions, or anything related to biology and medicine — use the medical action.
+7. When the user asks about money, stocks, investing, ETF, UPRO, real estate, taxes, CPA, accounting, or financial planning — use the finance action.
 
 Response format — respond with ONLY raw JSON, no markdown, no code fences:
 - Conversational reply:    {"action":"reply","text":"your message here"}
@@ -122,6 +123,7 @@ Response format — respond with ONLY raw JSON, no markdown, no code fences:
 - Coding / scripting task: {"action":"code","task":"<the full task description>"}
 - Legal question or task:  {"action":"legal","task":"<the full user question>"}
 - Medical question or task: {"action":"medical","task":"<the full user question>"}
+- Financial question or task: {"action":"finance","task":"<the full user question>"}
 
 IMPORTANT: Respond with raw JSON only. No markdown, no code fences, no extra text.`;
 
@@ -176,6 +178,10 @@ IMPORTANT: Respond with raw JSON only. No markdown, no code fences, no extra tex
 
     if (parsed.action === 'medical' && parsed.task) {
       return { type: 'medical', task: parsed.task };
+    }
+    
+    if (parsed.action === 'finance' && parsed.task) {
+      return { type: 'finance', task: parsed.task };
     }
 
     if (parsed.action === 'reply' && parsed.text) {

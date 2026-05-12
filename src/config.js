@@ -34,4 +34,8 @@ module.exports = {
   LEGAL_DATA_DIR:   path.resolve(SKILLS_DIR, 'legal', 'data'),
   LEGAL_CACHE_DIR:  path.resolve(SKILLS_DIR, 'legal', 'data', '.legal-cache'),
   LEGAL_MEMORY_DIR: path.resolve(SKILLS_DIR, 'legal', 'memory'),
+  // Finance sub-agent
+  FINANCE_DATA_DIR:   path.resolve(SKILLS_DIR, 'finance', 'data'),
+  FINANCE_CACHE_DIR:  path.resolve(SKILLS_DIR, 'finance', 'data', '.finance-cache'),
+  FINANCE_MEMORY_DIR: path.resolve(SKILLS_DIR, 'finance', 'memory'),
 };

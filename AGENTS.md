@@ -96,6 +96,10 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 - **Scheduler Reliability (WSL2 Fix)**: Replaced `node-cron` with the `cron` package. This resolves the "missed execution" warnings and job skipping caused by WSL2 clock drift and `node-cron`'s fragile 1000ms threshold.
 - **Error Handling**: Implemented `formatApiError` in `bot.js` to catch LLM API errors (like low credit balance or rate limits) and return user-friendly warnings instead of raw JSON errors.
 - **Startup Cache Warming**: The bot now automatically initializes and warms the legal document cache in the background upon startup, ensuring the Legal agent is ready for immediate queries.
+- **Finance Agent — New Sub-Agent**: Implemented a specialized Finance sub-agent (`src/finance-agent.js`) for stock investing, real estate, and tax analysis.
+    - Added prefix-based routing (`ask finance ...`) and automatic intent detection in the main LLM router.
+    - Created `skills/finance/` directory structure with isolated data and memory storage.
+    - Integrated sophisticated financial strategy guidelines (UPRO ETF, Real Estate CAGR analysis, CPA tax knowledge) into the system prompt.
 
 ### 2026-05-10
 - **Legal Agent Rewrite — Direct File Access**: Completely replaced the RAG pipeline (`rag-engine.js` + Voyage AI embeddings) with a tool-calling agentic loop. The legal sub-agent now has tools for listing, searching (grep), viewing, and creating/editing documents. This approach preserves table/financial data structure and handles OCR text far better than chunked embeddings.

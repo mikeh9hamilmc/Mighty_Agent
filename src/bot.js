@@ -7,6 +7,7 @@ const { decideAction, SKILLS } = require('./llm');
 const { runCoderAgent } = require('./coder-agent');
 const { runLegalAgent } = require('./legal-agent');
 const { runMedicalAgent } = require('./medical-agent');
+const { runFinanceAgent } = require('./finance-agent');
 const logger = require('./logger');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
@@ -142,7 +143,11 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
 
   let sources = [];
   try {
-    const runAgent = agentName === 'legal' ? runLegalAgent : runMedicalAgent;
+    let runAgent;
+    if (agentName === 'legal') runAgent = runLegalAgent;
+    else if (agentName === 'medical') runAgent = runMedicalAgent;
+    else if (agentName === 'finance') runAgent = runFinanceAgent;
+
     const result = await runAgent(question, (chunk) => {
       accumulated += chunk;
     });
@@ -232,7 +237,16 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    // Future agents: 'financial', etc.
+    if (agentName === 'finance') {
+      const thinking = await ctx.reply('💰 Finance is thinking...');
+      streamAgentResponse(ctx, thinking.message_id, question, 'finance').catch(err => {
+        logger.error(`[Finance] Background stream error: ${err.message}`);
+        ctx.reply(formatApiError(err)).catch(() => {});
+      });
+      return;
+    }
+
+    // Future agents: 'real-estate', etc.
   }
 
   const userMessage = rawMessage;
@@ -297,6 +311,19 @@ bot.on('text', async (ctx) => {
     });
     return;
   }
+    // type === 'finance' — delegate to Finance sub-agent
+    if (decision.type === 'finance') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinking.message_id, undefined,
+        '💰 Finance is thinking...'
+      );
+      // Fire in background
+      streamAgentResponse(ctx, thinking.message_id, decision.task, 'finance').catch(err => {
+        logger.error(`[Finance] Background stream error: ${err.message}`);
+        ctx.reply(`❌ Finance agent error: ${err.message}`).catch(() => {});
+      });
+      return;
+    }
 
   // type === 'run'
   const { skill, args } = decision;
