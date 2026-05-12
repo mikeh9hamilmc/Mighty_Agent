@@ -52,6 +52,7 @@ bot.start(async (ctx) => {
     `*Commands:*\n` +
     `/list — show available skills\n` +
     `/run <skill-name> [args] — run a skill directly\n` +
+    `/refresh — reload all agent data and memory\n` +
     `/status — show uptime info\n\n` +
     `_Example: "What time is it?"_`,
     { parse_mode: 'Markdown' }
@@ -71,6 +72,18 @@ bot.command('list', async (ctx) => {
   const total = ALL_SKILLS.length;
   const header = '*Skills (' + enabled + '/' + total + ' enabled):*';
   await ctx.reply(header + '\n\n' + lines.join('\n\n'), { parse_mode: 'Markdown' });
+});
+
+// ─── /refresh ───────────────────────────────────────────────────────────────
+bot.command('refresh', async (ctx) => {
+  await ctx.reply('🔄 Refreshing all agent data and memory...');
+  try {
+    const summary = await refreshAllManagers();
+    await ctx.reply(`✅ *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    logger.error(`[Refresh] Failed: ${err.message}`);
+    await ctx.reply(`❌ Refresh failed: ${err.message}`);
+  }
 });
 
 // ─── /run ───────────────────────────────────────────────────────────────────
@@ -96,8 +109,7 @@ bot.command('run', async (ctx) => {
   await ctx.reply(`⚙️ Running skill \`${skillName}\`...`, { parse_mode: 'Markdown' });
 
   if (skillName === 'refresh') {
-    const summary = await refreshAllManagers();
-    return ctx.reply(`🔄 *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
+    return ctx.reply('💡 Use /refresh instead to reload agent data.');
   }
 
   const { output, exitCode, timedOut } = await runSkill(skillName, args);
@@ -373,8 +385,7 @@ bot.on('text', async (ctx) => {
     );
 
     if (skill === 'refresh') {
-      const summary = await refreshAllManagers();
-      await ctx.reply(`🔄 *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
+      await ctx.reply('💡 Use /refresh instead to reload agent data.');
       return;
     }
 
