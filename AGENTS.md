@@ -44,6 +44,9 @@ The system is built as a modular Node.js application that bridges the gap betwee
 ### Proactive Interactions
 The agent can also initiate contact via the **Scheduler**. For example, it is configured to send a "Good morning" message every day at 9:00 AM automatically.
 
+> [!NOTE]
+> **Telegram UI Sync**: Telegram aggressively caches the bot's command menu on the client side. If you add a new skill or perform a `/refresh` and don't see the updated commands when typing `/`, you may need to completely close and restart your Telegram app (Desktop or Mobile) to force it to fetch the new menu.
+
 ## Security & Safety
 
 -   **User Locking**: Only one specific Telegram account can control the agent.
