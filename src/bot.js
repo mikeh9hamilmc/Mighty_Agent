@@ -60,9 +60,9 @@ bot.start(async (ctx) => {
 });
 
 // ─── /list ──────────────────────────────────────────────────────────────────
-// Escape characters that Telegram's Markdown v1 parser treats as special.
-function mdEscape(str) {
-  return str.replace(/[_*[\]`]/g, '\\$&');
+// Escape HTML entities to avoid Telegram parsing errors in HTML mode.
+function htmlEscape(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 bot.command('list', async (ctx) => {
@@ -71,12 +71,12 @@ bot.command('list', async (ctx) => {
   }
   const lines = ALL_SKILLS.map(s => {
     const icon = s.enabled ? '✅' : '⛔';
-    return `${icon} *${mdEscape(s.name)}* — /${s.name}\n   ${mdEscape(s.description)}`;
+    return `${icon} <b>${htmlEscape(s.name)}</b> — /${htmlEscape(s.name)}\n   ${htmlEscape(s.description)}`;
   });
   const enabled = ALL_SKILLS.filter(s => s.enabled).length;
   const total = ALL_SKILLS.length;
-  const header = `*Skills (${enabled}/${total} enabled):*`;
-  await ctx.reply(header + '\n\n' + lines.join('\n\n'), { parse_mode: 'Markdown' });
+  const header = `<b>Skills (${enabled}/${total} enabled):</b>`;
+  await ctx.reply(header + '\n\n' + lines.join('\n\n'), { parse_mode: 'HTML' });
 });
 
 // ─── /refresh ───────────────────────────────────────────────────────────────
