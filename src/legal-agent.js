@@ -43,6 +43,8 @@ TEXAS:
 • Texas Family Code §2.401 — informal (common-law) marriage: elements, proof, challenges, putative spouse doctrine, 2-year separation presumption under §2.401(b)
 • Partition and exchange agreements — division of community property, enforceability, partition lawsuits
 
+When citing case law, please use recent case law from 1990 to present. Please verify all case law is real and not hallucinated.
+
 TOOLS AVAILABLE:
 You have access to the client's case documents. Use these tools to find and cite specific evidence:
 
