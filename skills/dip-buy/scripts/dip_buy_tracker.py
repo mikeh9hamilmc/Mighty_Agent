@@ -18,28 +18,16 @@ ib = IB()
 CONFIG_FILE = 'dip_buy_config.json'
 
 def load_config():
-    """Load or initialize config."""
+    """Load config or exit if missing."""
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
-    return {
-        'target_spend': 80000,
-        'last_buy_price': 137.71,
-        'last_buy_shares': 580,
-        'last_buy_date': datetime.now().strftime('%Y-%m-%d'),
-        'dip_levels': [
-            {'drop_pct': 1, 'additional_pct': 0.10},
-            {'drop_pct': 2, 'additional_pct': 0.10},
-            {'drop_pct': 3, 'additional_pct': 0.10},
-            {'drop_pct': 4, 'additional_pct': 0.10},
-            {'drop_pct': 5, 'additional_pct': 0.10},
-            {'drop_pct': 6, 'additional_pct': 0.10},
-            {'drop_pct': 7, 'additional_pct': 0.10},
-            {'drop_pct': 8, 'additional_pct': 0.10},
-            {'drop_pct': 9, 'additional_pct': 0.10},
-            {'drop_pct': 10, 'additional_pct': 0.10},
-        ]
-    }
+    
+    print(f"❌ Error: Configuration file '{CONFIG_FILE}' not found.")
+    print(f"Please create it by copying '{CONFIG_FILE}.example' and updating it with your values.")
+    print(f"Command: cp {CONFIG_FILE}.example {CONFIG_FILE}")
+    import sys
+    sys.exit(1)
 
 def save_config(config):
     """Save config."""
