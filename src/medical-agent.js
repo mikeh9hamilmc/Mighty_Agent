@@ -438,4 +438,5 @@ async function runMedicalAgent(question, onChunk = () => { }) {
   return { answer: fullAnswer, sources: [...sources] };
 }
 
-module.exports = { runMedicalAgent };
+module.exports = { runMedicalAgent, medicalTools };
+

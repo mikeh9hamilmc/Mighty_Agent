@@ -268,4 +268,5 @@ async function runFinanceAgent(question, onChunk = () => { }) {
   return { answer: fullAnswer, sources: [...sources] };
 }
 
-module.exports = { runFinanceAgent };
+module.exports = { runFinanceAgent, financeTools };
+

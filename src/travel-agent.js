@@ -259,4 +259,5 @@ async function runTravelAgent(question, onChunk = () => { }) {
   return { answer: fullAnswer, sources: [...sources] };
 }
 
-module.exports = { runTravelAgent };
+module.exports = { runTravelAgent, travelTools };
+

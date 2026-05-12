@@ -435,4 +435,5 @@ async function decideAction(userMessage, onStatus = () => { }) {
   }
 }
 
-module.exports = { decideAction, loadSkills, SKILLS, ALL_SKILLS };
+module.exports = { decideAction, loadSkills, SKILLS, ALL_SKILLS, mainDocs };
+

@@ -370,4 +370,5 @@ async function runCoderAgent(question, onChunk = () => {}) {
   return { answer: fullAnswer, sources: [...sources] };
 }
 
-module.exports = { runCoderAgent };
+module.exports = { runCoderAgent, coderTools };
+

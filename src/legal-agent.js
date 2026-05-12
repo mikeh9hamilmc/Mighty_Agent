@@ -463,4 +463,5 @@ async function runLegalAgent(question, onChunk = () => { }) {
   return { answer: fullAnswer, sources: [...sources] };
 }
 
-module.exports = { runLegalAgent };
+module.exports = { runLegalAgent, legalTools };
+
