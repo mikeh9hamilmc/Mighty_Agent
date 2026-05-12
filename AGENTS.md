@@ -12,7 +12,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
 - **`src/scheduler.js`**: Manages time-based tasks using `node-cron`. Currently configured to send a daily 9:00 AM greeting to the authorized user.
 - **`src/bot.js`**: Orchestrates the Telegram interaction using the `telegraf` library.
     - **Security Middleware**: Validates every incoming message against the `AUTHORIZED_USER_ID`. Unauthorized messages are silently ignored.
-    - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/run`, and `/status`.
+    - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/refresh`, `/status`, and individual commands for every enabled skill (e.g., `/dip_buy`).
     - **Natural Language Handler**: Routes all non-command text messages to the LLM layer.
 - **`src/llm.js`**: Orchestrates the Main Agent using the OpenRouter API (`@preset/mighty-agent-main`).
     - **Agentic Loop**: Runs a tool-calling loop (up to 10 iterations) instead of a one-shot call.
@@ -35,7 +35,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
 1.  **Input**: User sends a message to the Telegram bot.
 2.  **Authentication**: The bot checks if the user's ID matches the `AUTHORIZED_USER_ID` in `.env`.
 3.  **Analysis**:
-    - If it's a command (e.g., `/run date-time`), it goes straight to the Executor.
+    - If it's a command (e.g., `/dip_buy`), it goes straight to the Executor.
     - If it's text, it's sent to the LLM with the current skill manifest (names and descriptions).
 4.  **Decision**: The LLM returns JSON indicating either a conversational `reply` or a `run` action with a specific `skill` name and `args`.
 5.  **Execution**: (If `run`) The Executor locates the script for the specified skill, spawns a Python child process, captures output, and monitors for timeouts.
@@ -84,14 +84,26 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
     - Trained to research flights, cars, stays, and cruises via Kayak.
     - Integrated into the main agentic loop with automatic intent detection.
 - **Global Memory & Refresh System**:
-    - **Shared Memory**: Refactored `DocumentManager` to inject ALL `.md` files from the Main Agent's memory into all sub-agents. This ensures user facts (e.g., home address) are universally accessible across all agents.
-    - **Native Refresh Skill**: Implemented a `refresh` skill that triggers a system-wide `refreshAllManagers()` call. This allows the agent to reload all caches and memories instantly without restarting the Node.js process.
-    - **Memory Inversion**: Updated `getCoreMemory` to automatically read all files in an agent's own memory directory, making them part of the core context.
+    - **Shared Memory**: Refactored `DocumentManager` to inject ALL `.md` files from the Main Agent's memory into all sub-agents.
+    - **Global Memory Caching**: Implemented a module-level in-memory cache for global memory files in `src/document-tools.js`. Memory is loaded once per startup or refresh, eliminating redundant disk I/O.
+    - **Global Memory Fallback**: Fixed `toolReadMemory` and `toolListMemories` to fall back to the main memory directory for sub-agents, ensuring cross-agent visibility of user facts.
+    - **Native Refresh Command**: Replaced the `refresh` skill with a native `/refresh` bot command that triggers a system-wide `refreshAllManagers()` call.
+- **Startup Optimization & Singleton Pattern**:
+    - **Singleton DocumentManagers**: Refactored all agent modules to export their singleton `DocumentManager` instances.
+    - **Pre-warming Fix**: Updated `src/index.js` to use these singleton instances for background cache warming, resolving a bug where duplicate instances caused double-initialization during refresh.
+- **Telegram Interface & Command Refactoring**:
+    - **Removed `/run` Command**: The generic `/run` command was removed in favor of dedicated commands for every skill.
+    - **Dynamic Command Registration**: The bot now automatically registers a dedicated Telegram command for every enabled skill (e.g., `dip-buy` becomes `/dip_buy`).
+    - **Telegram Menu Sync**: Implemented `syncTelegramCommands()` to programmatically update the Telegram "slash" menu via the `setMyCommands` API on every startup and refresh.
+    - **List Stability**: Switched `/list` to HTML parse mode with automatic entity escaping to prevent Markdown parsing crashes from skill descriptions.
+- **Skill Renaming & Consistency**:
+    - **Underscore Migration**: Renamed all skill folders and internal name fields to use underscores instead of dashes for valid Telegram command syntax (e.g., `check-cash` -> `check_cash`).
+    - **Logic Updates**: Updated `scheduler.js` and `check_upro.py` to reflect the new folder structure.
 - **Trading Skill Enhancements (Dip-Buy & Check-UPRO)**:
     - **Purchase Ledger System**: Implemented a `purchase_ledger.json` system to track share age and tax lots.
-    - **Tax Lot Awareness**: `check-upro` now displays a "Tax Lot Breakdown," calculating share age and flagging lots as "LONG TERM" (>1 year) or "SHORT TERM."
-    - **Fill Reliability**: Increased the `execute_buy` timeout to 60 seconds and adjusted the limit price to `current_price - 0.10` to improve fill probability and price entry.
-    - **Security & Setup**: Added `.gitignore` rules for local trade configs and implemented `.example` file auto-initialization with user warnings.
+    - **Tax Lot Awareness**: `check_upro` now displays a "Tax Lot Breakdown," calculating share age and flagging lots as "LONG TERM" (>1 year) or "SHORT TERM."
+    - **Fill Reliability**: Increased the `execute_buy` timeout to 60 seconds and adjusted the limit price to `current_price - 0.10`.
+    - **Security & Setup**: Added `.gitignore` rules for local trade configs and implemented `.example` file auto-initialization.
 - **Legal Agent Refinement**: Updated the system prompt to prioritize recent, verified case law (1990–present) and prevent hallucinations.
 
 ### 2026-05-11
