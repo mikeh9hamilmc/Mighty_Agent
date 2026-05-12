@@ -521,15 +521,30 @@ class DocumentManager {
 
   getCoreMemory() {
     this.ensureMemoryDir();
+    let memoryStr = '';
+
+    // Global Core Memory (always injected from main agent)
+    if (this.agentName !== 'main') {
+      const mainCorePath = path.resolve(SKILLS_DIR, 'main', 'memory', 'core_memory.md');
+      if (fs.existsSync(mainCorePath)) {
+        try {
+          memoryStr += fs.readFileSync(mainCorePath, 'utf-8') + '\n\n';
+        } catch (err) {
+          logger.error(`[Global Memory] Failed to read main core_memory.md: ${err.message}`);
+        }
+      }
+    }
+
+    // Domain-Specific Core Memory
     const corePath = path.join(this.memoryDir, 'core_memory.md');
     if (fs.existsSync(corePath)) {
       try {
-        return fs.readFileSync(corePath, 'utf-8');
+        memoryStr += fs.readFileSync(corePath, 'utf-8');
       } catch (err) {
         logger.error(`[${this.agentCap} Memory] Failed to read core_memory.md: ${err.message}`);
       }
     }
-    return null;
+    return memoryStr.trim() || null;
   }
 
   async executeTool(name, input) {
