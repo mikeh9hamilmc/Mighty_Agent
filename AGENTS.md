@@ -80,6 +80,19 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
     - Added prefix-based routing (`ask finance ...`) and automatic intent detection in the main LLM router.
     - Created `skills/finance/` directory structure with isolated data and memory storage.
     - Integrated sophisticated financial strategy guidelines (UPRO ETF, Real Estate CAGR analysis, CPA tax knowledge) into the system prompt.
+- **Travel Agent — New Sub-Agent**: Implemented a specialized Travel sub-agent (`src/travel-agent.js`) using the `@preset/mighty-agent-travel` model.
+    - Trained to research flights, cars, stays, and cruises via Kayak.
+    - Integrated into the main agentic loop with automatic intent detection.
+- **Global Memory & Refresh System**:
+    - **Shared Memory**: Refactored `DocumentManager` to inject ALL `.md` files from the Main Agent's memory into all sub-agents. This ensures user facts (e.g., home address) are universally accessible across all agents.
+    - **Native Refresh Skill**: Implemented a `refresh` skill that triggers a system-wide `refreshAllManagers()` call. This allows the agent to reload all caches and memories instantly without restarting the Node.js process.
+    - **Memory Inversion**: Updated `getCoreMemory` to automatically read all files in an agent's own memory directory, making them part of the core context.
+- **Trading Skill Enhancements (Dip-Buy & Check-UPRO)**:
+    - **Purchase Ledger System**: Implemented a `purchase_ledger.json` system to track share age and tax lots.
+    - **Tax Lot Awareness**: `check-upro` now displays a "Tax Lot Breakdown," calculating share age and flagging lots as "LONG TERM" (>1 year) or "SHORT TERM."
+    - **Fill Reliability**: Increased the `execute_buy` timeout to 60 seconds and adjusted the limit price to `current_price - 0.10` to improve fill probability and price entry.
+    - **Security & Setup**: Added `.gitignore` rules for local trade configs and implemented `.example` file auto-initialization with user warnings.
+- **Legal Agent Refinement**: Updated the system prompt to prioritize recent, verified case law (1990–present) and prevent hallucinations.
 
 ### 2026-05-11
 - **Medical Agent — OpenRouter Migration**: Migrated the Medical sub-agent from the direct Anthropic SDK to OpenRouter API using the `@preset/mighty-agent-medical` model.
