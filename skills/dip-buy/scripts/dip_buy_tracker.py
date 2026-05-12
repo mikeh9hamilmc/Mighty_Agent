@@ -16,6 +16,7 @@ logging.getLogger('ib_insync.Decoder').setLevel(logging.CRITICAL)
 
 ib = IB()
 CONFIG_FILE = 'dip_buy_config.json'
+LEDGER_FILE = 'purchase_ledger.json'
 
 def load_config():
     """Load config or exit if missing."""
@@ -33,6 +34,33 @@ def save_config(config):
     """Save config."""
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
+
+def update_ledger(shares, price):
+    """Append a purchase to the ledger."""
+    # Ensure ledger exists (copy from example if missing)
+    if not os.path.exists(LEDGER_FILE):
+        if os.path.exists(LEDGER_FILE + '.example'):
+            import shutil
+            shutil.copy(LEDGER_FILE + '.example', LEDGER_FILE)
+        else:
+            with open(LEDGER_FILE, 'w') as f:
+                json.dump([], f)
+                
+    try:
+        with open(LEDGER_FILE, 'r') as f:
+            ledger = json.load(f)
+    except:
+        ledger = []
+        
+    ledger.append({
+        "date": datetime.now().strftime('%Y-%m-%d'),
+        "shares": int(shares),
+        "price": float(round(price, 2))
+    })
+    
+    with open(LEDGER_FILE, 'w') as f:
+        json.dump(ledger, f, indent=2)
+    print(f"   Ledger updated: {LEDGER_FILE}")
 
 def get_current_price():
     """Get current UPRO price."""
@@ -175,6 +203,9 @@ def check_dip_buys(silent=False):
                     config['last_buy_shares'] = shares_to_buy
                     config['last_buy_date'] = datetime.now().strftime('%Y-%m-%d')
                     save_config(config)
+                    
+                    # Update purchase ledger for tax lot tracking
+                    update_ledger(shares_to_buy, limit_price)
                     
                     final_msg = f"✅ BUY EXECUTED!\n\n{shares_to_buy} shares @ ${limit_price:.2f}\nTotal: ${shares_to_buy * limit_price:,.2f}"
                     print(final_msg)
