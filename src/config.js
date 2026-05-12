@@ -22,11 +22,23 @@ function optional(name, defaultVal = '') {
 
 const SKILLS_DIR = path.resolve(__dirname, '..', 'skills');
 
+// Auto-detect .venv python executable if it exists
+const VENV_PATH = path.resolve(__dirname, '..', '.venv');
+const VENV_PYTHON_WIN = path.join(VENV_PATH, 'Scripts', 'python.exe');
+const VENV_PYTHON_UNIX = path.join(VENV_PATH, 'bin', 'python');
+
+let defaultPython = 'python';
+if (require('fs').existsSync(VENV_PYTHON_WIN)) {
+  defaultPython = VENV_PYTHON_WIN;
+} else if (require('fs').existsSync(VENV_PYTHON_UNIX)) {
+  defaultPython = VENV_PYTHON_UNIX;
+}
+
 module.exports = {
   TELEGRAM_TOKEN:     required('TELEGRAM_TOKEN'),
   AUTHORIZED_USER_ID: parseInt(required('AUTHORIZED_USER_ID'), 10),
   OPENROUTER_API_KEY: required('OPENROUTER_API_KEY'),
-  PYTHON_CMD:         process.env.PYTHON_CMD || 'python',
+  PYTHON_CMD:         process.env.PYTHON_CMD === 'python' ? defaultPython : (process.env.PYTHON_CMD || defaultPython),
   SCRIPT_TIMEOUT_MS:  parseInt(process.env.SCRIPT_TIMEOUT_SEC || '60', 10) * 1000,
   SKILLS_DIR,
   BRAVE_API_KEY: optional('BRAVE_API_KEY'), // Used by all agents via DocumentManager.toolWebSearch
