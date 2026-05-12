@@ -293,7 +293,13 @@ Workflow:
 • Before answering personal questions, check your memory with list_memories / read_memory.
 • For domain-specific questions (legal/medical/finance/code) — use ask_agent to delegate.
 • For tasks the Python skills handle — use run_skill.
-• Always check your memory when the user references past conversations or preferences.`;
+• Always check your memory when the user references past conversations or preferences.
+
+MEMORY RULES (CRITICAL — never break these):
+• When the user asks you to remember, note, save, or store ANY information — you MUST call save_memory FIRST, then confirm. Never just say "I'll remember that" without calling the tool.
+• When the user shares personal facts (their name, preferences, dates, decisions) — proactively save them using save_memory without being asked.
+• Memory filenames should be short and descriptive (e.g. "user-name", "user-preferences", "important-dates").`;
+
 
 /**
  * Run the main agent agentic loop for a given user message.
