@@ -8,3 +8,5 @@ logs/
 skills/legal/data/*
 !skills/legal/data/README.md
 skills/legal/data/.legal-cache/
+
+.venv/

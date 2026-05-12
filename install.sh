@@ -28,22 +28,22 @@ npm install
 
 # ─── 4. Python Virtual Environment ──────────────────────────────────────────
 echo "🐍 Setting up Python virtual environment..."
-if [ ! -d "venv" ]; then
-  python3 -m venv venv
+if [ ! -d ".venv" ]; then
+  python3 -m venv .venv
 fi
-./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt
+./.venv/bin/pip install --upgrade pip
+./.venv/bin/pip install -r requirements.txt
 
 # ─── 5. Playwright (for weather skill) ──────────────────────────────────────
 echo "🎭 Installing Playwright browsers..."
-./venv/bin/playwright install --with-deps chromium
+./.venv/bin/playwright install --with-deps chromium
 
 # ─── 6. Create .env from template ───────────────────────────────────────────
 if [ ! -f ".env" ]; then
   echo "📝 Creating .env from .env.example..."
   cp .env.example .env
   # Point PYTHON_CMD to the venv python
-  sed -i "s|PYTHON_CMD=python|PYTHON_CMD=$(pwd)/venv/bin/python|g" .env
+  sed -i "s|PYTHON_CMD=python|PYTHON_CMD=$(pwd)/.venv/bin/python|g" .env
   echo ""
   echo "⚠️  ACTION REQUIRED: Edit .env with your API keys!"
   echo "   nano .env"
