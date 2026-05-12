@@ -529,9 +529,11 @@ class DocumentManager {
     // Global Core Memory (always injected from main agent)
     if (this.agentName !== 'main') {
       const mainMemoryDir = path.resolve(SKILLS_DIR, 'main', 'memory');
+      logger.debug(`[Global Memory] Checking for main memory at: ${mainMemoryDir}`);
       if (fs.existsSync(mainMemoryDir)) {
         try {
           const files = fs.readdirSync(mainMemoryDir).filter(f => f.endsWith('.md'));
+          logger.debug(`[Global Memory] Found ${files.length} memory files in main.`);
           for (const file of files) {
             const filePath = path.join(mainMemoryDir, file);
             memoryStr += `[Global Memory: ${file}]\n` + fs.readFileSync(filePath, 'utf-8') + '\n\n';
@@ -539,6 +541,8 @@ class DocumentManager {
         } catch (err) {
           logger.error(`[Global Memory] Failed to read main memory dir: ${err.message}`);
         }
+      } else {
+        logger.debug(`[Global Memory] Main memory directory NOT FOUND at: ${mainMemoryDir}`);
       }
     }
 
