@@ -10,28 +10,8 @@ async function main() {
 
   // Pre-warm document caches in background (non-blocking).
   const legalTools = new DocumentManager('legal');
-  legalTools.initTools()
-    .then(summary => {
-      const line2 = summary.split('\n')[1] || 'ready';
-      logger.info(`[Legal Tools] Startup: ${line2}`);
-    })
-    .catch(err => logger.warn(`[Legal Tools] Startup cache warning: ${err.message}`));
-
   const medicalTools = new DocumentManager('medical');
-  medicalTools.initTools()
-    .then(summary => {
-      const line2 = summary.split('\n')[1] || 'ready';
-      logger.info(`[Medical Tools] Startup: ${line2}`);
-    })
-    .catch(err => logger.warn(`[Medical Tools] Startup cache warning: ${err.message}`));
-
   const financeTools = new DocumentManager('finance');
-  financeTools.initTools()
-    .then(summary => {
-      const line2 = summary.split('\n')[1] || 'ready';
-      logger.info(`[Finance Tools] Startup: ${line2}`);
-    })
-    .catch(err => logger.warn(`[Finance Tools] Startup cache warning: ${err.message}`));
 
   const coderTools = new DocumentManager('coder');
   const travelTools = new DocumentManager('travel');
