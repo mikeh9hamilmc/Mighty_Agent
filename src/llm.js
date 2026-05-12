@@ -74,7 +74,8 @@ function loadSkills() {
   }
 
   // Sub-agent skill folders don't have runnable scripts — exclude them from the skills list
-  const AGENT_FOLDERS = new Set(['legal', 'medical', 'finance', 'main', 'coder', 'travel']);
+  const AGENT_FOLDERS = new Set(['legal', 'medical', 'finance', 'main', 'coder', 'travel', 'refresh']);
+
 
   const config = loadEnabledConfig();
   let configDirty = false;
