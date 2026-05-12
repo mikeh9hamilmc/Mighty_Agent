@@ -89,6 +89,30 @@ function validateWritableFilename(filename, allowedExts = WRITABLE_EXTS) {
 
 const instances = new Set();
 
+// Module-level cache for main agent memory — shared across all sub-agents.
+// Populated on first access or after refreshAllManagers(); reads disk just once.
+const _globalMemoryCache = { content: null };
+
+function loadGlobalMemoryCache() {
+  const mainMemoryDir = path.resolve(SKILLS_DIR, 'main', 'memory');
+  let str = '';
+  if (fs.existsSync(mainMemoryDir)) {
+    try {
+      const files = fs.readdirSync(mainMemoryDir).filter(f => f.endsWith('.md'));
+      logger.debug(`[Global Memory] Loading ${files.length} main memory file(s) into cache.`);
+      for (const file of files) {
+        str += `[Global Memory: ${file}]\n` + fs.readFileSync(path.join(mainMemoryDir, file), 'utf-8') + '\n\n';
+      }
+    } catch (err) {
+      logger.error(`[Global Memory] Failed to load main memory: ${err.message}`);
+    }
+  } else {
+    logger.debug(`[Global Memory] Main memory directory not found: ${mainMemoryDir}`);
+  }
+  _globalMemoryCache.content = str || '';
+  return _globalMemoryCache.content;
+}
+
 class DocumentManager {
   constructor(agentName) {
     this.agentName = agentName;
@@ -488,6 +512,11 @@ class DocumentManager {
     try {
       fs.writeFileSync(filePath, content, 'utf-8');
       logger.info(`[${this.agentCap} Memory] Saved: ${filename}`);
+      // Invalidate global cache so sub-agents see the new memory immediately
+      if (this.agentName === 'main') {
+        _globalMemoryCache.content = null;
+        logger.debug('[Global Memory] Cache invalidated after main agent save_memory.');
+      }
       return { success: true, message: `✅ Memory saved to \`${filename}\`.` };
     } catch (err) {
       logger.error(`[${this.agentCap} Memory] Failed to save ${filename}: ${err.message}`);
@@ -526,23 +555,13 @@ class DocumentManager {
     this.ensureMemoryDir();
     let memoryStr = '';
 
-    // Global Core Memory (always injected from main agent)
+    // Global Core Memory — served from the in-memory cache (populated once at startup or refresh)
     if (this.agentName !== 'main') {
-      const mainMemoryDir = path.resolve(SKILLS_DIR, 'main', 'memory');
-      logger.debug(`[Global Memory] Checking for main memory at: ${mainMemoryDir}`);
-      if (fs.existsSync(mainMemoryDir)) {
-        try {
-          const files = fs.readdirSync(mainMemoryDir).filter(f => f.endsWith('.md'));
-          logger.debug(`[Global Memory] Found ${files.length} memory files in main.`);
-          for (const file of files) {
-            const filePath = path.join(mainMemoryDir, file);
-            memoryStr += `[Global Memory: ${file}]\n` + fs.readFileSync(filePath, 'utf-8') + '\n\n';
-          }
-        } catch (err) {
-          logger.error(`[Global Memory] Failed to read main memory dir: ${err.message}`);
-        }
-      } else {
-        logger.debug(`[Global Memory] Main memory directory NOT FOUND at: ${mainMemoryDir}`);
+      if (_globalMemoryCache.content === null) {
+        loadGlobalMemoryCache();
+      }
+      if (_globalMemoryCache.content) {
+        memoryStr += _globalMemoryCache.content;
       }
     }
 
@@ -589,6 +608,11 @@ class DocumentManager {
 }
 
 async function refreshAllManagers() {
+  // Invalidate and reload the global main memory cache first
+  _globalMemoryCache.content = null;
+  loadGlobalMemoryCache();
+  logger.info('[Global Memory] Cache refreshed.');
+
   const results = [];
   for (const manager of instances) {
     try {
