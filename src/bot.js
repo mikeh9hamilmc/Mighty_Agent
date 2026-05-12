@@ -252,8 +252,14 @@ bot.on('text', async (ctx) => {
   const userMessage = rawMessage;
 
   const thinking = await ctx.reply('🤔 Thinking...');
-
-  const decision = await decideAction(userMessage);
+  let lastStatus = '';
+  
+  const decision = await decideAction(userMessage, (statusText) => {
+    if (statusText !== lastStatus) {
+      lastStatus = statusText;
+      ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, statusText).catch(() => {});
+    }
+  });
 
   if (decision.type === 'reply') {
     await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, decision.text);

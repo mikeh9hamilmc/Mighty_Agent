@@ -264,20 +264,20 @@ async function callOpenRouter(messages, tools) {
 
 async function executeLocalTool(name, args) {
   switch (name) {
-    case 'list_documents':  return mainDocs.toolListDocuments();
-    case 'grep_documents':  return mainDocs.toolGrepDocuments(args);
-    case 'view_document':   return mainDocs.toolViewDocument(args);
-    case 'web_search':      return await mainDocs.toolWebSearch(args);
-    case 'save_memory':     return mainDocs.toolSaveMemory(args);
-    case 'read_memory':     return mainDocs.toolReadMemory(args);
-    case 'list_memories':   return mainDocs.toolListMemories();
+    case 'list_documents': return mainDocs.toolListDocuments();
+    case 'grep_documents': return mainDocs.toolGrepDocuments(args);
+    case 'view_document': return mainDocs.toolViewDocument(args);
+    case 'web_search': return await mainDocs.toolWebSearch(args);
+    case 'save_memory': return mainDocs.toolSaveMemory(args);
+    case 'read_memory': return mainDocs.toolReadMemory(args);
+    case 'list_memories': return mainDocs.toolListMemories();
     default: return { error: `Unknown tool: ${name}` };
   }
 }
 
 // ─── Main decision loop ───────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a friendly, knowledgeable personal assistant for Michael Hamilton. Your primary mode is conversation — chat naturally, answer questions, and be helpful.
+const SYSTEM_PROMPT = `You are a friendly, knowledgeable personal assistant for the user. Your primary mode is conversation — chat naturally, answer questions, and be helpful.
 
 You have access to:
 1. Your own documents and memory (skills/main/data/) — consult these for personal context before answering.
@@ -313,14 +313,14 @@ MEMORY RULES (CRITICAL — never break these):
  *   { type: 'finance', task: '...' }
  *   { type: 'error',   text: '...' }
  */
-async function decideAction(userMessage) {
+async function decideAction(userMessage, onStatus = () => {}) {
   const TOOLS = buildTools();
 
   let coreMemory = '';
   try {
     const cm = mainDocs.getCoreMemory();
     if (cm) coreMemory = `\n\n--- CORE MEMORY ---\n${cm}\n-------------------`;
-  } catch (_) {}
+  } catch (_) { }
 
   const messages = [
     { role: 'user', content: userMessage },
@@ -332,6 +332,7 @@ async function decideAction(userMessage) {
     while (iterations < MAX_ITERATIONS) {
       iterations++;
       logger.info(`[Main] Iteration ${iterations}/${MAX_ITERATIONS}`);
+      onStatus(`🤔 Thinking... (Step ${iterations})`);
 
       const systemMsg = { role: 'system', content: SYSTEM_PROMPT + coreMemory };
       const data = await callOpenRouter([systemMsg, ...messages], TOOLS);
@@ -350,7 +351,7 @@ async function decideAction(userMessage) {
       for (const toolCall of assistantMsg.tool_calls) {
         const { name, arguments: argsJson } = toolCall.function;
         let args = {};
-        try { args = JSON.parse(argsJson); } catch (_) {}
+        try { args = JSON.parse(argsJson); } catch (_) { }
 
         logger.info(`[Main] Tool call: ${name} ${argsJson}`);
 
@@ -371,6 +372,7 @@ async function decideAction(userMessage) {
         }
 
         // ── Local tool: execute and feed result back ──────────────────────
+        onStatus(`🛠️ Using tool: ${name}...`);
         const result = await executeLocalTool(name, args);
         messages.push({
           role: 'tool',

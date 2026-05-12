@@ -474,6 +474,9 @@ class DocumentManager {
   }
 
   toolSaveMemory({ topic, content }) {
+    if (!topic || !content) {
+      return { error: 'Both topic and content are required.' };
+    }
     this.ensureMemoryDir();
     const safeTopic = topic.replace(/[^a-z0-9_-]/gi, '_');
     const filename = `${safeTopic}.md`;
