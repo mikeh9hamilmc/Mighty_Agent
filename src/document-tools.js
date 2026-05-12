@@ -528,25 +528,33 @@ class DocumentManager {
 
     // Global Core Memory (always injected from main agent)
     if (this.agentName !== 'main') {
-      const mainCorePath = path.resolve(SKILLS_DIR, 'main', 'memory', 'core_memory.md');
-      if (fs.existsSync(mainCorePath)) {
+      const mainMemoryDir = path.resolve(SKILLS_DIR, 'main', 'memory');
+      if (fs.existsSync(mainMemoryDir)) {
         try {
-          memoryStr += fs.readFileSync(mainCorePath, 'utf-8') + '\n\n';
+          const files = fs.readdirSync(mainMemoryDir).filter(f => f.endsWith('.md'));
+          for (const file of files) {
+            const filePath = path.join(mainMemoryDir, file);
+            memoryStr += `[Global Memory: ${file}]\n` + fs.readFileSync(filePath, 'utf-8') + '\n\n';
+          }
         } catch (err) {
-          logger.error(`[Global Memory] Failed to read main core_memory.md: ${err.message}`);
+          logger.error(`[Global Memory] Failed to read main memory dir: ${err.message}`);
         }
       }
     }
 
-    // Domain-Specific Core Memory
-    const corePath = path.join(this.memoryDir, 'core_memory.md');
-    if (fs.existsSync(corePath)) {
+    // Domain-Specific Core Memory (read all memory files for this agent)
+    if (fs.existsSync(this.memoryDir)) {
       try {
-        memoryStr += fs.readFileSync(corePath, 'utf-8');
+        const files = fs.readdirSync(this.memoryDir).filter(f => f.endsWith('.md'));
+        for (const file of files) {
+          const filePath = path.join(this.memoryDir, file);
+          memoryStr += `[${this.agentCap} Memory: ${file}]\n` + fs.readFileSync(filePath, 'utf-8') + '\n\n';
+        }
       } catch (err) {
-        logger.error(`[${this.agentCap} Memory] Failed to read core_memory.md: ${err.message}`);
+        logger.error(`[${this.agentCap} Memory] Failed to read memory dir: ${err.message}`);
       }
     }
+
     return memoryStr.trim() || null;
   }
 
