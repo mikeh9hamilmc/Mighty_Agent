@@ -51,9 +51,9 @@ bot.start(async (ctx) => {
     `Just send me a message in natural language and I'll figure out which skill to use.\n\n` +
     `*Commands:*\n` +
     `/list — show available skills\n` +
-    `/run <skill-name> [args] — run a skill directly\n` +
     `/refresh — reload all agent data and memory\n` +
     `/status — show uptime info\n\n` +
+    `Each enabled skill also has its own command (see /list).\n\n` +
     `_Example: "What time is it?"_`,
     { parse_mode: 'Markdown' }
   );
@@ -66,7 +66,8 @@ bot.command('list', async (ctx) => {
   }
   const lines = ALL_SKILLS.map(s => {
     const icon = s.enabled ? '✅' : '⛔';
-    return icon + ' *' + s.name + '*\n   ' + s.description;
+    const cmd = '/' + s.name.replace(/-/g, '_');
+    return icon + ' *' + s.name + '* — ' + cmd + '\n   ' + s.description;
   });
   const enabled = ALL_SKILLS.filter(s => s.enabled).length;
   const total = ALL_SKILLS.length;
@@ -86,41 +87,26 @@ bot.command('refresh', async (ctx) => {
   }
 });
 
-// ─── /run ───────────────────────────────────────────────────────────────────
-bot.command('run', async (ctx) => {
-  const parts = ctx.message.text.split(/\s+/).slice(1); // remove "/run"
-  if (parts.length === 0) {
-    return ctx.reply('Usage: `/run <skill-name> [args...]`', { parse_mode: 'Markdown' });
+// ─── Per-skill commands ────────────────────────────────────────────────────────
+// Registers one /command per enabled skill. Hyphens → underscores (Telegram
+// command alphabet: [a-z0-9_]). The original skill name is still used internally.
+function registerSkillCommands() {
+  for (const skill of SKILLS) {
+    const cmdName = skill.name.replace(/-/g, '_'); // e.g. dip-buy → dip_buy
+    bot.command(cmdName, async (ctx) => {
+      const args = ctx.message.text.trim().split(/\s+/).slice(1);
+      await ctx.reply(`⚙️ Running \`${skill.name}\\`${args.length ? ' with args: ' + args.join(' ') : ''}...`, { parse_mode: 'Markdown' });
+      const { output, exitCode, timedOut } = await runSkill(skill.name, args);
+      let result = `✅ \`${skill.name}\`\n\n`;
+      if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
+      result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
+      if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
+      await ctx.reply(result, { parse_mode: 'Markdown' });
+    });
+    logger.info(`Registered command /${cmdName} → skill "${skill.name}"`);
   }
-
-  const [skillName, ...args] = parts;
-
-  const skill = SKILLS.find(s => s.name === skillName);
-  if (!skill) {
-    const available = SKILLS.length > 0
-      ? SKILLS.map(s => `\`${s.name}\``).join(', ')
-      : '_none_';
-    return ctx.reply(
-      `❌ Unknown skill: \`${skillName}\`\n\nAvailable: ${available}`,
-      { parse_mode: 'Markdown' }
-    );
-  }
-
-  await ctx.reply(`⚙️ Running skill \`${skillName}\`...`, { parse_mode: 'Markdown' });
-
-  if (skillName === 'refresh') {
-    return ctx.reply('💡 Use /refresh instead to reload agent data.');
-  }
-
-  const { output, exitCode, timedOut } = await runSkill(skillName, args);
-
-  let result = '';
-  if (timedOut) result += '⏱ *Skill timed out.*\n\n';
-  result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
-  if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
-
-  await ctx.reply(result, { parse_mode: 'Markdown' });
-});
+}
+registerSkillCommands();
 
 // ─── /status ────────────────────────────────────────────────────────────────
 bot.command('status', async (ctx) => {
@@ -383,11 +369,6 @@ bot.on('text', async (ctx) => {
       `⚙️ Running skill \`${skill}\`${args.length ? ` with args: ${args.join(' ')}` : ''}...`,
       { parse_mode: 'Markdown' }
     );
-
-    if (skill === 'refresh') {
-      await ctx.reply('💡 Use /refresh instead to reload agent data.');
-      return;
-    }
 
     const { output, exitCode, timedOut } = await runSkill(skill, args);
 
