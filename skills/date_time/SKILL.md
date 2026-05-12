@@ -1,5 +1,5 @@
 ---
-name: date-time
+name: date_time
 description: Reads and returns the current local date and time. Use when the user asks what time or date it is, wants a timestamp, or needs to know the current day, month, or year.
 license: MIT
 compatibility: Requires Python 3.x

@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timedelta
 
 ib = IB()
-LEDGER_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'dip-buy', 'scripts', 'purchase_ledger.json')
+LEDGER_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'dip_buy', 'scripts', 'purchase_ledger.json')
 
 def check_upro_position():
     """Check UPRO position."""

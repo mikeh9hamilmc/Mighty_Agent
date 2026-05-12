@@ -1,5 +1,5 @@
 ---
-name: check-upro
+name: check_upro
 description: Checks your current UPRO (ProShares UltraPro S&P500) position, including the total number of shares and the average purchase price. Use this to monitor your exposure to UPRO.
 ---
 

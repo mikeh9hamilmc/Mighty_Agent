@@ -1,5 +1,5 @@
 ---
-name: check-cash
+name: check_cash
 description: Checks the current cash balance, net liquidation value, and buying power of your Interactive Brokers account. Use this to monitor your liquidity and account health.
 ---
 

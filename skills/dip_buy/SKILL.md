@@ -1,5 +1,5 @@
 ---
-name: dip-buy
+name: dip_buy
 description: Monitors UPRO price and automatically executes buy orders on Interactive Brokers when the price drops by 1% or more from the last purchase price. Use this to track or trigger automated dip-buying strategies.
 ---
 

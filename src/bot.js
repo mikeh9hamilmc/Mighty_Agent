@@ -66,8 +66,7 @@ bot.command('list', async (ctx) => {
   }
   const lines = ALL_SKILLS.map(s => {
     const icon = s.enabled ? '✅' : '⛔';
-    const cmd = '/' + s.name.replace(/-/g, '_');
-    return icon + ' *' + s.name + '* — ' + cmd + '\n   ' + s.description;
+    return icon + ' *' + s.name + '* — /' + s.name + '\n   ' + s.description;
   });
   const enabled = ALL_SKILLS.filter(s => s.enabled).length;
   const total = ALL_SKILLS.length;
@@ -88,14 +87,12 @@ bot.command('refresh', async (ctx) => {
 });
 
 // ─── Per-skill commands ────────────────────────────────────────────────────────
-// Registers one /command per enabled skill. Hyphens → underscores (Telegram
-// command alphabet: [a-z0-9_]). The original skill name is still used internally.
+// Registers one /command per enabled skill (skill names use underscores).
 function registerSkillCommands() {
   for (const skill of SKILLS) {
-    const cmdName = skill.name.replace(/-/g, '_'); // e.g. dip-buy → dip_buy
-    bot.command(cmdName, async (ctx) => {
+    bot.command(skill.name, async (ctx) => {
       const args = ctx.message.text.trim().split(/\s+/).slice(1);
-      await ctx.reply(`⚙️ Running \`${skill.name}\\`${args.length ? ' with args: ' + args.join(' ') : ''}...`, { parse_mode: 'Markdown' });
+      await ctx.reply(`⚙️ Running \`${skill.name}\`${args.length ? ' with args: ' + args.join(' ') : ''}...`, { parse_mode: 'Markdown' });
       const { output, exitCode, timedOut } = await runSkill(skill.name, args);
       let result = `✅ \`${skill.name}\`\n\n`;
       if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
@@ -103,7 +100,7 @@ function registerSkillCommands() {
       if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
       await ctx.reply(result, { parse_mode: 'Markdown' });
     });
-    logger.info(`Registered command /${cmdName} → skill "${skill.name}"`);
+    logger.info(`Registered command /${skill.name} → skill "${skill.name}"`);
   }
 }
 registerSkillCommands();

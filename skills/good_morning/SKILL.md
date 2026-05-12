@@ -1,5 +1,5 @@
 ---
-name: good-morning
+name: good_morning
 description: Sends a warm morning greeting combined with the current weather report. Use this for the daily morning greeting or when the user wants to start their day with a status update.
 license: MIT
 compatibility: Requires Python 3.x
