@@ -369,7 +369,14 @@ async function decideAction(userMessage, onStatus = () => { }) {
           const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder' };
           const type = agentMap[args.agent] || 'reply';
           if (type === 'reply') return { type: 'reply', text: "I wasn't sure which agent to use." };
-          return { type, task: args.task };
+
+          // Inject main memory so sub-agents have user context (name, preferences, etc.)
+          let task = args.task;
+          const mainMemory = mainDocs.getCoreMemory();
+          if (mainMemory) {
+            task = `[Context from main agent memory — use this to personalise your response]\n${mainMemory}\n\n[User request]\n${task}`;
+          }
+          return { type, task };
         }
 
         // ── Local tool: execute and feed result back ──────────────────────
