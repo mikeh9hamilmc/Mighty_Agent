@@ -337,7 +337,7 @@ async function callOpenRouter(messages, tools) {
  * @param {function} onChunk Callback called with each text chunk.
  * @returns {Promise<{ answer: string, sources: string[] }>}
  */
-async function runMedicalAgent(question, onChunk = () => { }) {
+async function runMedicalAgent(question, onChunk = () => { }, onStatus = () => { }) {
   logger.info(`[Medical] Question: ${question}`);
 
   // ── Special commands ──────────────────────────────────────────────────────
@@ -407,6 +407,7 @@ async function runMedicalAgent(question, onChunk = () => { }) {
       }
 
       logger.info(`[Medical] Tool call: ${name} ${argsJson}`);
+      onStatus(`Tool call: ${name}`);
       const result = await medicalTools.executeTool(name, args);
 
       // Track sources from document tools

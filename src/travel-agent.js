@@ -179,7 +179,7 @@ async function callOpenRouter(messages, tools) {
   return await response.json();
 }
 
-async function runTravelAgent(question, onChunk = () => { }) {
+async function runTravelAgent(question, onChunk = () => { }, onStatus = () => { }) {
   logger.info(`[Travel] Question: ${question}`);
 
   if (isStatusCommand(question)) {
@@ -235,6 +235,7 @@ async function runTravelAgent(question, onChunk = () => { }) {
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
 
       logger.info(`[Travel] Tool call: ${name} ${argsJson}`);
+      onStatus(`Tool call: ${name}`);
       const result = await travelTools.executeTool(name, args);
 
       if (name === 'view_document' && result.filename) sources.add(result.filename);

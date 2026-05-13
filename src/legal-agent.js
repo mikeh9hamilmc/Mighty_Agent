@@ -362,7 +362,7 @@ async function callOpenRouter(messages, tools) {
  * @param {function} onChunk Callback called with each text chunk.
  * @returns {Promise<{ answer: string, sources: string[] }>}
  */
-async function runLegalAgent(question, onChunk = () => { }) {
+async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }) {
   logger.info(`[Legal] Question: ${question}`);
 
   // ── Special commands ──────────────────────────────────────────────────────
@@ -432,6 +432,7 @@ async function runLegalAgent(question, onChunk = () => { }) {
       }
 
       logger.info(`[Legal] Tool call: ${name} ${argsJson}`);
+      onStatus(`Tool call: ${name}`);
       const result = await legalTools.executeTool(name, args);
 
       // Track sources from document tools

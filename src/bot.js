@@ -160,6 +160,7 @@ bot.command('status', async (ctx) => {
  */
 async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   let accumulated = '';
+  let currentStatus = '';
   let lastEdit = Date.now();
   const EDIT_INTERVAL_MS = 800;
   const agentCap = agentName.charAt(0).toUpperCase() + agentName.slice(1);
@@ -167,17 +168,26 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   // Streaming edit loop
   const editIfDue = async () => {
     const now = Date.now();
-    if (now - lastEdit >= EDIT_INTERVAL_MS && accumulated.length > 0) {
-      try {
-        await ctx.telegram.editMessageText(
-          ctx.chat.id, thinkingMsgId, undefined,
-          accumulated.slice(0, 4000), // Telegram limit
-          { parse_mode: 'Markdown' }
-        );
-        lastEdit = now;
-      } catch (err) {
-        // If it's a markdown error, it might recover on the next chunk, so just ignore
-        lastEdit = now;
+    if (now - lastEdit >= EDIT_INTERVAL_MS) {
+      let textToEdit = '';
+      if (accumulated.length > 0) {
+        textToEdit = accumulated;
+      } else if (currentStatus.length > 0) {
+        textToEdit = currentStatus;
+      }
+
+      if (textToEdit.length > 0) {
+        try {
+          await ctx.telegram.editMessageText(
+            ctx.chat.id, thinkingMsgId, undefined,
+            textToEdit.slice(0, 4000), // Telegram limit
+            { parse_mode: 'Markdown' }
+          );
+          lastEdit = now;
+        } catch (err) {
+          // If it's a markdown error, it might recover on the next chunk, so just ignore
+          lastEdit = now;
+        }
       }
     }
   };
@@ -193,9 +203,11 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
     else if (agentName === 'coder') runAgent = runCoderAgent;
     else if (agentName === 'travel') runAgent = runTravelAgent;
 
-    const result = await runAgent(question, (chunk) => {
-      accumulated += chunk;
-    });
+    const result = await runAgent(
+      question,
+      (chunk) => { accumulated += chunk; },
+      (status) => { currentStatus = status; }
+    );
     sources = result.sources || [];
   } finally {
     clearInterval(interval);

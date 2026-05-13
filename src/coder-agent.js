@@ -280,7 +280,7 @@ function isReadCommand(text) {
 
 // ─── Main Agent Loop ──────────────────────────────────────────────────────────
 
-async function runCoderAgent(question, onChunk = () => {}) {
+async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}) {
   logger.info('[Coder] Starting task: ' + question);
 
   if (isReadCommand(question)) {
@@ -331,6 +331,7 @@ async function runCoderAgent(question, onChunk = () => {}) {
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
 
       logger.info('[Coder] Tool call: ' + name + ' ' + argsJson);
+      onStatus(`Tool call: ${name}`);
 
       let result;
       if (name === 'write_file') {

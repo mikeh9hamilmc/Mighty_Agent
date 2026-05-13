@@ -417,7 +417,7 @@ async function decideAction(userMessage, onStatus = () => { }) {
         }
 
         // ── Local tool: execute and feed result back ──────────────────────
-        onStatus(`🛠️ Using tool: ${name}...`);
+        onStatus(`Tool call: ${name}`);
         const result = await executeLocalTool(name, args);
         messages.push({
           role: 'tool',

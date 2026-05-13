@@ -188,7 +188,7 @@ async function callOpenRouter(messages, tools) {
   return await response.json();
 }
 
-async function runFinanceAgent(question, onChunk = () => { }) {
+async function runFinanceAgent(question, onChunk = () => { }, onStatus = () => { }) {
   logger.info(`[Finance] Question: ${question}`);
 
   if (isStatusCommand(question)) {
@@ -244,6 +244,7 @@ async function runFinanceAgent(question, onChunk = () => { }) {
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
 
       logger.info(`[Finance] Tool call: ${name} ${argsJson}`);
+      onStatus(`Tool call: ${name}`);
       const result = await financeTools.executeTool(name, args);
 
       if (name === 'view_document' && result.filename) sources.add(result.filename);
