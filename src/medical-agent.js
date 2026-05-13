@@ -407,7 +407,7 @@ async function runMedicalAgent(question, onChunk = () => { }, onStatus = () => {
       }
 
       logger.info(`[Medical] Tool call: ${name} ${argsJson}`);
-      onStatus(`Tool call: ${name}`);
+      onStatus(`🛠️ Tool call: ${name}`);
       const result = await medicalTools.executeTool(name, args);
 
       // Track sources from document tools

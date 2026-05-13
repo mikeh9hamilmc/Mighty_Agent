@@ -432,7 +432,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
       }
 
       logger.info(`[Legal] Tool call: ${name} ${argsJson}`);
-      onStatus(`Tool call: ${name}`);
+      onStatus(`🛠️ Tool call: ${name}`);
       const result = await legalTools.executeTool(name, args);
 
       // Track sources from document tools

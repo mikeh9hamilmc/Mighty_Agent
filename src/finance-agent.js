@@ -244,7 +244,7 @@ async function runFinanceAgent(question, onChunk = () => { }, onStatus = () => {
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
 
       logger.info(`[Finance] Tool call: ${name} ${argsJson}`);
-      onStatus(`Tool call: ${name}`);
+      onStatus(`🛠️ Tool call: ${name}`);
       const result = await financeTools.executeTool(name, args);
 
       if (name === 'view_document' && result.filename) sources.add(result.filename);

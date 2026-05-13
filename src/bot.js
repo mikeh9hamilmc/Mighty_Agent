@@ -165,24 +165,31 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   const EDIT_INTERVAL_MS = 800;
   const agentCap = agentName.charAt(0).toUpperCase() + agentName.slice(1);
 
+  let lastTextSent = '';
+
   // Streaming edit loop
   const editIfDue = async () => {
     const now = Date.now();
     if (now - lastEdit >= EDIT_INTERVAL_MS) {
       let textToEdit = '';
+      let isMarkdown = false;
+
       if (accumulated.length > 0) {
         textToEdit = accumulated;
+        isMarkdown = true;
       } else if (currentStatus.length > 0) {
         textToEdit = currentStatus;
+        isMarkdown = false;
       }
 
-      if (textToEdit.length > 0) {
+      if (textToEdit.length > 0 && textToEdit !== lastTextSent) {
         try {
           await ctx.telegram.editMessageText(
             ctx.chat.id, thinkingMsgId, undefined,
             textToEdit.slice(0, 4000), // Telegram limit
-            { parse_mode: 'Markdown' }
+            isMarkdown ? { parse_mode: 'Markdown' } : undefined
           );
+          lastTextSent = textToEdit;
           lastEdit = now;
         } catch (err) {
           // If it's a markdown error, it might recover on the next chunk, so just ignore

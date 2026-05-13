@@ -235,7 +235,7 @@ async function runTravelAgent(question, onChunk = () => { }, onStatus = () => { 
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
 
       logger.info(`[Travel] Tool call: ${name} ${argsJson}`);
-      onStatus(`Tool call: ${name}`);
+      onStatus(`🛠️ Tool call: ${name}`);
       const result = await travelTools.executeTool(name, args);
 
       if (name === 'view_document' && result.filename) sources.add(result.filename);

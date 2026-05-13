@@ -331,7 +331,7 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}) 
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
 
       logger.info('[Coder] Tool call: ' + name + ' ' + argsJson);
-      onStatus(`Tool call: ${name}`);
+      onStatus(`🛠️ Tool call: ${name}`);
 
       let result;
       if (name === 'write_file') {
