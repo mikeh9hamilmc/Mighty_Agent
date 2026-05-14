@@ -189,14 +189,29 @@ class DocumentManager {
     if (!fs.existsSync(this.dataDir)) fs.mkdirSync(this.dataDir, { recursive: true });
     fs.mkdirSync(this.cacheDir, { recursive: true });
 
-    const files = fs.readdirSync(this.dataDir).filter(f => {
+    // Collect files from data/ directory
+    const dataFiles = fs.readdirSync(this.dataDir).filter(f => {
       const ext = path.extname(f).toLowerCase();
       const base = f.toLowerCase();
       return SUPPORTED_EXTS.has(ext) && !EXCLUDED_FILES.has(base) && !f.startsWith('.');
-    });
+    }).map(f => ({ filename: f, filePath: path.join(this.dataDir, f) }));
 
-    if (files.length === 0) {
-      logger.info(`[${this.agentCap} Tools] No documents found in ${this.agentName}/data/.`);
+    // Also index .md/.txt files from memory/ — so research saved via save_memory is queryable
+    const memoryFiles = [];
+    if (fs.existsSync(this.memoryDir)) {
+      fs.readdirSync(this.memoryDir).filter(f => {
+        const ext = path.extname(f).toLowerCase();
+        return (ext === '.md' || ext === '.txt') && !f.startsWith('.');
+      }).forEach(f => {
+        // Prefix name to avoid collisions with data/ files
+        memoryFiles.push({ filename: `memory_${f}`, filePath: path.join(this.memoryDir, f) });
+      });
+    }
+
+    const allFiles = [...dataFiles, ...memoryFiles];
+
+    if (allFiles.length === 0) {
+      logger.info(`[${this.agentCap} Tools] No documents found in ${this.agentName}/data/ or memory/.`);
       this._docIndex = new Map();
       return `📂 No supported documents found in ${this.agentName}/data/.`;
     }
@@ -204,8 +219,7 @@ class DocumentManager {
     let extracted = 0, cached = 0, failed = 0;
     const newIndex = new Map();
 
-    for (const filename of files) {
-      const filePath = path.join(this.dataDir, filename);
+    for (const { filename, filePath } of allFiles) {
       const cacheFile = this.getCacheFilePath(filename);
       const ext = path.extname(filename).toLowerCase();
       const stat = fs.statSync(filePath);
@@ -248,7 +262,6 @@ class DocumentManager {
         });
       } catch (err) {
         logger.error(`[${this.agentCap} Tools] Failed to process ${filename}: ${err.message}`);
-        failed++;
       }
     }
 

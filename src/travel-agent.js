@@ -32,12 +32,20 @@ You have access to the user's travel documents and records. Use these tools to f
 • grep_documents — Search for specific terms, dates, locations, names, or phrases across all documents. Use this to FIND relevant content before reading it. Supports regex patterns.
 • view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep. Also use to read an entire short document.
 • web_search — Search the web for flight prices, hotel options, or travel trends. Use when the user's documents don't contain the answer, especially using kayak.com.
+• create_document — Write research, notes, or itineraries to a .md or .txt file in the travel/data/ folder. Use this when the user asks you to "save", "write", or "document" research. Files saved here are INDEXED and can be queried later with list_documents, grep_documents, and view_document.
 
 WORKFLOW:
 1. For questions about the travel documents: use grep_documents to locate relevant content → view_document to read context → formulate your answer citing specific lines.
 2. For broad questions: use view_document to read the document in chunks.
 3. For market research questions: use web_search to find current data, prices, etc.
 4. Always ground factual claims in a specific document or web search result.
+5. When asked to "write to a file", "save research", or "document" information: use create_document (NOT save_memory).
+
+IMPORTANT — create_document vs save_memory:
+• create_document → saves to travel/data/ → QUERYABLE by the user and document tools. Use for research reports, destination guides, itineraries, price comparisons.
+• save_memory → saves to travel/memory/ → private agent notes only, NOT queryable by the user. Use for brief personal strategy notes between sessions.
+
+When the user says "write to a file" or "save this", ALWAYS use create_document.
 
 IMPORTANT WARNINGS:
 • Document text is extracted via OCR. When reporting specific amounts, dates, or account numbers, note that the user should verify against the source PDF.
@@ -46,9 +54,9 @@ IMPORTANT WARNINGS:
 • Cite sources: "Per 2024_Itinerary.pdf (lines 12-15)..."
 
 MEMORY SYSTEM:
-You possess persistent long-term memory. You have a private memory folder where you store your notes, timelines, and strategies.
-• At the end of a conversation, or when learning a critical new fact or decision, use \`save_memory\` to record it.
-• When starting a new task, use \`list_memories\` and \`read_memory\` to recall previous context.
+You possess persistent long-term memory. You have a private memory folder where you store brief strategic notes.
+• Use save_memory ONLY for short personal notes (preferences, past decisions, strategies) — NOT for research output.
+• When starting a new task, use list_memories and read_memory to recall previous context.
 • (Critical facts may be auto-injected below by the system).`;
 
 const TOOLS = [
@@ -87,6 +95,22 @@ const TOOLS = [
           end_line: { type: 'integer', description: 'End line (inclusive).' },
         },
         required: ['filename'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_document',
+      description: 'Write research, notes, or an itinerary to a file in travel/data/. Files saved here are indexed and queryable with list_documents/grep_documents/view_document. Use this (NOT save_memory) when the user asks to save or document research.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Filename with .md or .txt extension (e.g. galapagos_research.md). No path separators.' },
+          content: { type: 'string', description: 'The full Markdown content to write to the file.' },
+          overwrite: { type: 'boolean', description: 'Set to true to overwrite an existing file.' },
+        },
+        required: ['filename', 'content'],
       },
     },
   },
