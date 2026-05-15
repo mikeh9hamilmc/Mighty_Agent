@@ -3,7 +3,7 @@
 const { Telegraf } = require('telegraf');
 const { TELEGRAM_TOKEN, AUTHORIZED_USER_ID } = require('./config');
 const { runSkill } = require('./executor');
-const { decideAction, SKILLS, ALL_SKILLS } = require('./llm');
+const llm = require('./llm');
 const { refreshAllManagers } = require('./document-tools');
 const { runCoderAgent } = require('./coder-agent');
 const { runLegalAgent } = require('./legal-agent');
@@ -11,6 +11,7 @@ const { runMedicalAgent } = require('./medical-agent');
 const { runFinanceAgent } = require('./finance-agent');
 const { runTravelAgent } = require('./travel-agent');
 const logger = require('./logger');
+const session = require('./session');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const startTime = Date.now();
@@ -44,6 +45,20 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+// ─── Chat Action Helper ─────────────────────────────────────────────────────
+/**
+ * Repeatedly sends the 'typing' chat action to Telegram to keep the
+ * "typing..." indicator (the three dots) visible in the header.
+ */
+function startTyping(ctx) {
+  ctx.sendChatAction('typing').catch(() => { });
+  const interval = setInterval(() => {
+    ctx.sendChatAction('typing').catch(() => { });
+  }, 4000);
+  return () => clearInterval(interval);
+}
+
+
 // ─── /start ────────────────────────────────────────────────────────────────
 bot.start(async (ctx) => {
   await ctx.reply(
@@ -66,15 +81,16 @@ function htmlEscape(str) {
 }
 
 bot.command('list', async (ctx) => {
-  if (ALL_SKILLS.length === 0) {
+  const allSkills = llm.ALL_SKILLS;
+  if (allSkills.length === 0) {
     return ctx.reply('📂 No skills found in the skills/ directory yet.');
   }
-  const lines = ALL_SKILLS.map(s => {
+  const lines = allSkills.map(s => {
     const icon = s.enabled ? '✅' : '⛔';
     return `${icon} <b>${htmlEscape(s.name)}</b> — /${htmlEscape(s.name)}\n   ${htmlEscape(s.description)}`;
   });
-  const enabled = ALL_SKILLS.filter(s => s.enabled).length;
-  const total = ALL_SKILLS.length;
+  const enabled = allSkills.filter(s => s.enabled).length;
+  const total = allSkills.length;
   const header = `<b>Skills (${enabled}/${total} enabled):</b>`;
   await ctx.reply(header + '\n\n' + lines.join('\n\n'), { parse_mode: 'HTML' });
 });
@@ -84,6 +100,7 @@ bot.command('refresh', async (ctx) => {
   await ctx.reply('🔄 Refreshing all agent data and memory...');
   try {
     const summary = await refreshAllManagers();
+    llm.refreshSkills();
     await syncTelegramCommands();
     await ctx.reply(`✅ *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
   } catch (err) {
@@ -95,8 +112,16 @@ bot.command('refresh', async (ctx) => {
 // ─── Per-skill commands ────────────────────────────────────────────────────────
 // Registers one /command per enabled skill (skill names use underscores).
 function registerSkillCommands() {
-  for (const skill of SKILLS) {
+  // Register handlers for ALL discovered skills.
+  // We check if they are enabled AT RUNTIME.
+  for (const skill of llm.ALL_SKILLS) {
     bot.command(skill.name, async (ctx) => {
+      // Find current skill state
+      const currentSkill = llm.ALL_SKILLS.find(s => s.name === skill.name);
+      if (!currentSkill || !currentSkill.enabled) {
+        return ctx.reply(`⛔ Skill \`${skill.name}\` is currently disabled.`);
+      }
+
       const args = ctx.message.text.trim().split(/\s+/).slice(1);
       await ctx.reply(`⚙️ Running \`${skill.name}\`${args.length ? ' with args: ' + args.join(' ') : ''}...`, { parse_mode: 'Markdown' });
       const { output, exitCode, timedOut } = await runSkill(skill.name, args);
@@ -106,7 +131,7 @@ function registerSkillCommands() {
       if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
       await ctx.reply(result, { parse_mode: 'Markdown' });
     });
-    logger.info(`Registered command /${skill.name} → skill "${skill.name}"`);
+    logger.info(`Registered command handler for /${skill.name} (enabled: ${skill.enabled})`);
   }
 }
 registerSkillCommands();
@@ -124,7 +149,7 @@ async function syncTelegramCommands() {
     { command: 'status',  description: 'Show bot uptime and system info' },
   ];
 
-  const skillCommands = SKILLS.map(s => ({
+  const skillCommands = llm.SKILLS.map(s => ({
     command: s.name,
     description: s.description.slice(0, 256), // Telegram max is 256 chars
   }));
@@ -166,6 +191,7 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   const agentCap = agentName.charAt(0).toUpperCase() + agentName.slice(1);
 
   let lastTextSent = '';
+  const stopTyping = startTyping(ctx);
 
   // Streaming edit loop
   const editIfDue = async () => {
@@ -202,6 +228,8 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   const interval = setInterval(editIfDue, EDIT_INTERVAL_MS);
 
   let sources = [];
+  const history = session.getHistory();
+
   try {
     let runAgent;
     if (agentName === 'legal') runAgent = runLegalAgent;
@@ -213,11 +241,19 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
     const result = await runAgent(
       question,
       (chunk) => { accumulated += chunk; },
-      (status) => { currentStatus = status; }
+      (status) => { currentStatus = status; },
+      history
     );
     sources = result.sources || [];
+    
+    // Add interaction to session history
+    if (accumulated.length > 0) {
+      session.addMessage('user', question);
+      session.addMessage('assistant', accumulated);
+    }
   } finally {
     clearInterval(interval);
+    stopTyping();
   }
 
   // Final edit with full answer (split if over Telegram's 4096 limit)
@@ -273,6 +309,7 @@ bot.on('text', async (ctx) => {
   try {
     const rawMessage = ctx.message.text;
     logger.info(`Message from ${ctx.from.id}: ${rawMessage}`);
+    let stopTyping = null;
 
     // ── "ask <agent>" prefix routing ──────────────────────────────────────────
     // Supports: "ask legal ...", "ask legal, ...", "ask legal: ..."
@@ -323,19 +360,26 @@ bot.on('text', async (ctx) => {
     }
 
     const userMessage = rawMessage;
+    stopTyping = startTyping(ctx);
 
-    const thinking = await ctx.reply('🤔 Thinking...');
+    // Reset session timer for every incoming message
+    session.resetTimer();
+
+    try {
+      const thinking = await ctx.reply('🤔 Thinking...');
     let lastStatus = '';
 
-    const decision = await decideAction(userMessage, (statusText) => {
+    const decision = await llm.decideAction(userMessage, (statusText) => {
       if (statusText !== lastStatus) {
         lastStatus = statusText;
         ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, statusText).catch(() => { });
       }
-    });
+    }, session.getHistory());
 
     if (decision.type === 'reply') {
       await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, decision.text);
+      session.addMessage('user', userMessage);
+      session.addMessage('assistant', decision.text);
       return;
     }
 
@@ -428,7 +472,13 @@ bot.on('text', async (ctx) => {
     if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
 
     await ctx.reply(result, { parse_mode: 'Markdown' });
+    
+    session.addMessage('user', userMessage);
+    session.addMessage('assistant', `Ran skill \`${skill}\`. Output:\n${result}`);
 
+    } finally {
+      if (stopTyping) stopTyping();
+    }
   } catch (err) {
     logger.error(`[Bot] Unhandled text handler error: ${err.message}`);
     try { await ctx.reply(`❌ Unexpected error: ${err.message}`); } catch (_) { }

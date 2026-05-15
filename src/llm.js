@@ -118,18 +118,28 @@ function loadSkills() {
   return allSkills;
 }
 
-const ALL_SKILLS = loadSkills();
-const SKILLS = ALL_SKILLS.filter(s => s.enabled);
+let ALL_SKILLS = [];
+let SKILLS = [];
 
-if (SKILLS.length === 0) {
-  logger.warn('No enabled skills found in the skills/ directory.');
-} else {
-  logger.info('Loaded ' + SKILLS.length + ' skill(s): ' + SKILLS.map(s => s.name).join(', '));
-  const disabled = ALL_SKILLS.filter(s => !s.enabled);
-  if (disabled.length > 0) {
-    logger.info('Disabled skill(s): ' + disabled.map(s => s.name).join(', '));
+function refreshSkills() {
+  ALL_SKILLS = loadSkills();
+  SKILLS = ALL_SKILLS.filter(s => s.enabled);
+
+  if (SKILLS.length === 0) {
+    logger.warn('No enabled skills found in the skills/ directory.');
+  } else {
+    logger.info('Loaded ' + SKILLS.length + ' skill(s): ' + SKILLS.map(s => s.name).join(', '));
+    const disabled = ALL_SKILLS.filter(s => !s.enabled);
+    if (disabled.length > 0) {
+      logger.info('Disabled skill(s): ' + disabled.map(s => s.name).join(', '));
+    }
   }
+  return { ALL_SKILLS, SKILLS };
 }
+
+// Initial load
+refreshSkills();
+
 
 
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
@@ -229,6 +239,21 @@ function buildTools() {
         },
       },
     },
+    // ── Session tools ───────────────────────────────────────────────────────
+    {
+      type: 'function',
+      function: {
+        name: 'save_session_history',
+        description: 'Save the current conversation history for the active session to a Markdown file in your personal data folder.',
+        parameters: {
+          type: 'object',
+          properties: {
+            filename: { type: 'string', description: 'Name of the file to create (e.g. "session_log_2024.md").' },
+          },
+          required: ['filename'],
+        },
+      },
+    },
     // ── Routing tools ────────────────────────────────────────────────────────
     {
       type: 'function',
@@ -309,6 +334,7 @@ async function executeLocalTool(name, args) {
     case 'save_memory': return mainDocs.toolSaveMemory(args);
     case 'read_memory': return mainDocs.toolReadMemory(args);
     case 'list_memories': return mainDocs.toolListMemories();
+    case 'save_session_history': return await mainDocs.toolSaveSessionHistory(args);
     default: return { error: `Unknown tool: ${name}` };
   }
 }
@@ -336,7 +362,8 @@ Workflow:
 MEMORY RULES (CRITICAL — never break these):
 • When the user asks you to remember, note, save, or store ANY information — you MUST call save_memory FIRST, then confirm. Never just say "I'll remember that" without calling the tool.
 • When the user shares personal facts (their name, preferences, dates, decisions) — proactively save them using save_memory without being asked.
-• Memory filenames should be short and descriptive (e.g. "user-name", "user-preferences", "important-dates").`;
+• Memory filenames should be short and descriptive (e.g. "user-name", "user-preferences", "important-dates").
+• ANY memory files listed in your CORE MEMORY section below are ALREADY FULLY LOADED. You can read them directly. DO NOT use \`view_document\`, \`grep_documents\`, or \`read_memory\` to read them. Just answer the user's question.`;
 
 
 /**
@@ -351,16 +378,23 @@ MEMORY RULES (CRITICAL — never break these):
  *   { type: 'finance', task: '...' }
  *   { type: 'error',   text: '...' }
  */
-async function decideAction(userMessage, onStatus = () => { }) {
+async function decideAction(userMessage, onStatus = () => { }, history = []) {
   const TOOLS = buildTools();
 
   let coreMemory = '';
+  let sources = new Set();
+  if (history.length > 0) sources.add('Session Conversation');
+
   try {
     const cm = mainDocs.getCoreMemory();
-    if (cm) coreMemory = `\n\n--- CORE MEMORY ---\n${cm}\n-------------------`;
+    if (cm) {
+      coreMemory = `\n\n--- CORE MEMORY ---\n${cm}\n-------------------`;
+      sources.add('Core Memory');
+    }
   } catch (_) { }
 
   const messages = [
+    ...history,
     { role: 'user', content: userMessage },
   ];
 
@@ -374,6 +408,10 @@ async function decideAction(userMessage, onStatus = () => { }) {
 
       const systemMsg = { role: 'system', content: SYSTEM_PROMPT + coreMemory };
       const data = await callOpenRouter([systemMsg, ...messages], TOOLS);
+      if (!data.choices || data.choices.length === 0) {
+        const errorMsg = data.error?.message || 'AI returned an empty response.';
+        throw new Error(errorMsg);
+      }
       const assistantMsg = data.choices[0].message;
 
       messages.push(assistantMsg);
@@ -381,7 +419,8 @@ async function decideAction(userMessage, onStatus = () => { }) {
       // No tool calls → plain conversational reply
       if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
         const text = assistantMsg.content || "I wasn't sure what to do. Could you rephrase?";
-        logger.info(`[Main] Conversational reply: ${text.slice(0, 80)}`);
+        const sourcesStr = sources.size > 0 ? Array.from(sources).join(', ') : 'Internal Knowledge';
+        logger.info(`[Main] Conversational reply [Sources: ${sourcesStr}]: ${text.slice(0, 80)}`);
         return { type: 'reply', text };
       }
 
@@ -392,6 +431,10 @@ async function decideAction(userMessage, onStatus = () => { }) {
         try { args = JSON.parse(argsJson); } catch (_) { }
 
         logger.info(`[Main] Tool call: ${name} ${argsJson}`);
+        
+        if (name === 'web_search') sources.add('Web Search');
+        if (name === 'read_memory' || name === 'list_memories') sources.add('Memory Tool');
+        if (name === 'view_document' || name === 'grep_documents' || name === 'list_documents') sources.add('Data File');
 
         // ── Routing tools: return immediately without adding tool result ──
         if (name === 'run_skill') {
@@ -436,5 +479,12 @@ async function decideAction(userMessage, onStatus = () => { }) {
   }
 }
 
-module.exports = { decideAction, loadSkills, SKILLS, ALL_SKILLS, mainDocs };
+module.exports = {
+  decideAction,
+  loadSkills,
+  refreshSkills,
+  mainDocs,
+  get SKILLS() { return SKILLS; },
+  get ALL_SKILLS() { return ALL_SKILLS; }
+};
 

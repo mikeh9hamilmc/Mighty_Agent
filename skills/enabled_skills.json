@@ -1,36 +1,16 @@
 {
   "_comment": "Set enabled to true/false to control which skills are available. Sub-agents (legal, medical, finance, coder, main) are always active and not listed here.",
   "skills": {
-    "check-cash": {
-      "enabled": true,
-      "description": "Check Interactive Brokers cash balance"
-    },
-    "check-upro": {
-      "enabled": true,
-      "description": "Check UPRO position and current price"
-    },
-    "date-time": {
-      "enabled": true,
-      "description": "Get the current date and time"
-    },
-    "dip-buy": {
-      "enabled": true,
-      "description": "UPRO dip-buying strategy tracker"
-    },
-    "good-morning": {
-      "enabled": true,
-      "description": "Morning greeting with weather"
-    },
     "weather": {
       "enabled": true,
       "description": "Get current weather conditions"
     },
     "check_cash": {
-      "enabled": true,
+      "enabled": false,
       "description": "Checks the current cash balance, net liquidation value, and buying power of your Interactive Brokers account. Use this to monitor your liquidity and account health."
     },
     "check_upro": {
-      "enabled": true,
+      "enabled": false,
       "description": "Checks your current UPRO (ProShares UltraPro S&P500) position, including the total number of shares and the average purchase price. Use this to monitor your exposure to UPRO."
     },
     "date_time": {
@@ -38,7 +18,7 @@
       "description": "Reads and returns the current local date and time. Use when the user asks what time or date it is, wants a timestamp, or needs to know the current day, month, or year."
     },
     "dip_buy": {
-      "enabled": true,
+      "enabled": false,
       "description": "Monitors UPRO price and automatically executes buy orders on Interactive Brokers when the price drops by 1% or more from the last purchase price. Use this to track or trigger automated dip-buying strategies."
     },
     "good_morning": {

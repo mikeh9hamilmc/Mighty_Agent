@@ -17,12 +17,12 @@ async function main() {
 
   // Pre-warm document caches in background (non-blocking).
   Promise.all([
-    legalTools.initTools(),
-    medicalTools.initTools(),
-    financeTools.initTools(),
-    coderTools.initTools(),
-    travelTools.initTools(),
-    mainDocs.initTools(),
+    legalTools.ensureInitialized(),
+    medicalTools.ensureInitialized(),
+    financeTools.ensureInitialized(),
+    coderTools.ensureInitialized(),
+    travelTools.ensureInitialized(),
+    mainDocs.ensureInitialized(),
   ]).then(() => {
     logger.info('Document caches pre-warmed for all agents.');
   }).catch(err => {
@@ -33,10 +33,12 @@ async function main() {
   process.once('SIGINT', () => {
     logger.info('SIGINT received. Shutting down...');
     bot.stop('SIGINT');
+    process.exit(0);
   });
   process.once('SIGTERM', () => {
     logger.info('SIGTERM received. Shutting down...');
     bot.stop('SIGTERM');
+    process.exit(0);
   });
 
   initScheduler(bot);

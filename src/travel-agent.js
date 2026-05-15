@@ -28,16 +28,16 @@ const SYSTEM_PROMPT = `you are travel, an experienced travel agent that can use 
 TOOLS AVAILABLE:
 You have access to the user's travel documents and records. Use these tools to find and cite specific evidence:
 
-• list_documents — See all available travel files with metadata. Start here if you don't know what's in the file system.
-• grep_documents — Search for specific terms, dates, locations, names, or phrases across all documents. Use this to FIND relevant content before reading it. Supports regex patterns.
-• view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep. Also use to read an entire short document.
-• web_search — Search the web for flight prices, hotel options, or travel trends. Use when the user's documents don't contain the answer, especially using kayak.com.
-• create_document — Write research, notes, or itineraries to a .md or .txt file in the travel/data/ folder. Use this when the user asks you to "save", "write", or "document" research. Files saved here are INDEXED and can be queried later with list_documents, grep_documents, and view_document.
+• grep_documents — Search for specific terms, dates, locations, names, or phrases across all documents. THIS IS YOUR FIRST ACTION for any factual question. Supports regex patterns.
+• view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep, or to read an entire short document.
+• list_documents — List all travel files with metadata. Use ONLY when the user explicitly asks "what files do you have" or "list my documents". Do NOT use this as your first step for factual questions.
+• web_search — Search the web for flight prices, hotel options, travel facts, or anything not in local documents. Use kayak.com for prices.
+• create_document — Write research, notes, or itineraries to a .md or .txt file in the travel/data/ folder.
 
-WORKFLOW:
-1. For questions about the travel documents: use grep_documents to locate relevant content → view_document to read context → formulate your answer citing specific lines.
-2. For broad questions: use view_document to read the document in chunks.
-3. For market research questions: use web_search to find current data, prices, etc.
+WORKFLOW & PRIORITY:
+1. FOR FACTUAL QUESTIONS: Always start with \`grep_documents\` to search local files. Do NOT start with \`list_documents\`.
+2. If \`grep_documents\` returns no relevant results, immediately use \`web_search\` to find the answer.
+3. NEVER output raw tool results (file lists, metadata, line counts) to the user. Only output natural language answers.
 4. Always ground factual claims in a specific document or web search result.
 5. When asked to "write to a file", "save research", or "document" information: use create_document (NOT save_memory).
 
@@ -165,6 +165,20 @@ const TOOLS = [
       parameters: { type: 'object', properties: {}, required: [] },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'save_session_history',
+      description: 'Save the current conversation history for the active session to a Markdown file in your personal data folder.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Name of the file to create (e.g. "session_log_2024.md").' },
+        },
+        required: ['filename'],
+      },
+    },
+  },
 ];
 
 // ─── Special Commands ─────────────────────────────────────────────────────────
@@ -175,7 +189,8 @@ function isReadCommand(msg) {
 }
 
 function isStatusCommand(msg) {
-  return /\b(how many|status|what.*loaded|documents.*loaded|index.*status|what files)\b/i.test(msg);
+  return /\b(status|what.*loaded|documents.*loaded|index.*status|what files)\b/i.test(msg) ||
+    /\bhow many\s+(documents|docs|files)\b/i.test(msg);
 }
 
 // ─── Streaming Agent Loop ────────────────────────────────────────────────────
@@ -203,7 +218,7 @@ async function callOpenRouter(messages, tools) {
   return await response.json();
 }
 
-async function runTravelAgent(question, onChunk = () => { }, onStatus = () => { }) {
+async function runTravelAgent(question, onChunk = () => { }, onStatus = () => { }, history = []) {
   logger.info(`[Travel] Question: ${question}`);
 
   if (isStatusCommand(question)) {
@@ -221,7 +236,10 @@ async function runTravelAgent(question, onChunk = () => { }, onStatus = () => { 
 
   await travelTools.ensureInitialized();
 
-  let messages = [{ role: 'user', content: question }];
+  let messages = [
+    ...history,
+    { role: 'user', content: question }
+  ];
   const sources = new Set();
   let fullAnswer = '';
   let iterations = 0;
@@ -233,13 +251,19 @@ async function runTravelAgent(question, onChunk = () => { }, onStatus = () => { 
     let currentSystemPrompt = SYSTEM_PROMPT;
     const coreMem = travelTools.getCoreMemory();
     if (coreMem) {
-      currentSystemPrompt += `\n\n--- AUTO-INJECTED CORE MEMORY ---\n${coreMem}\n---------------------------------`;
+      currentSystemPrompt += '\n\n--- AUTO-INJECTED CORE MEMORY ---\n' + coreMem + '\n---------------------------------';
+      sources.add('Core Memory');
     }
+    if (history.length > 0) sources.add('Session Conversation');
 
     const systemMsg = { role: 'system', content: currentSystemPrompt };
     const conversation = [systemMsg, ...messages];
 
     const data = await callOpenRouter(conversation, TOOLS);
+    if (!data.choices || data.choices.length === 0) {
+      const errorMsg = data.error?.message || 'AI returned an empty response. This can happen if the model is overloaded or content is filtered.';
+      throw new Error(errorMsg);
+    }
     const assistantMsg = data.choices[0].message;
     messages.push(assistantMsg);
 

@@ -9,13 +9,45 @@ logs/
 skills/legal/data/*
 !skills/legal/data/README.md
 skills/legal/data/.legal-cache/
+skills/legal/memory/*
+!skills/legal/memory/README.md
+
+# Medical sub-agent
+skills/medical/data/*
+!skills/medical/data/README.md
+skills/medical/data/.medical-cache/
+skills/medical/memory/*
+!skills/medical/memory/README.md
+
+# Travel sub-agent
+skills/travel/data/*
+!skills/travel/data/README.md
+skills/travel/data/.travel-cache/
+skills/travel/memory/*
+!skills/travel/memory/README.md
+
+# Finance sub-agent
+skills/finance/data/*
+!skills/finance/data/README.md
+skills/finance/data/.finance-cache/
+skills/finance/memory/*
+!skills/finance/memory/README.md
+
+# Coder sub-agent
+skills/coder/data/*
+!skills/coder/data/README.md
+skills/coder/data/.coder-cache/
+skills/coder/memory/*
+!skills/coder/memory/README.md
+
+# Main agent
+skills/main/data/*
+!skills/main/data/README.md
+skills/main/data/.main-cache/
+skills/main/memory/*
+!skills/main/memory/README.md
 
 .venv/
-.legal-cache/
-.medical-cache/
-.finance-cache/
-.coder-cache/
-.travel-cache/
 
 # Ignore local skill configurations and history
 skills/dip-buy/scripts/dip_buy_config.json

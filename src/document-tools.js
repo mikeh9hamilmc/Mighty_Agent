@@ -98,7 +98,7 @@ function loadGlobalMemoryCache() {
   let str = '';
   if (fs.existsSync(mainMemoryDir)) {
     try {
-      const files = fs.readdirSync(mainMemoryDir).filter(f => f.endsWith('.md'));
+      const files = fs.readdirSync(mainMemoryDir).filter(f => f.endsWith('.md') && !EXCLUDED_FILES.has(f.toLowerCase()));
       logger.debug(`[Global Memory] Loading ${files.length} main memory file(s) into cache.`);
       for (const file of files) {
         str += `[Global Memory: ${file}]\n` + fs.readFileSync(path.join(mainMemoryDir, file), 'utf-8') + '\n\n';
@@ -189,19 +189,68 @@ class DocumentManager {
     if (!fs.existsSync(this.dataDir)) fs.mkdirSync(this.dataDir, { recursive: true });
     fs.mkdirSync(this.cacheDir, { recursive: true });
 
-    // Collect files from data/ directory
-    const dataFiles = fs.readdirSync(this.dataDir).filter(f => {
+    // 1. Auto-convert binary files to Markdown
+    const rawFiles = fs.readdirSync(this.dataDir);
+    for (const f of rawFiles) {
+      if (f.startsWith('.')) continue;
       const ext = path.extname(f).toLowerCase();
       const base = f.toLowerCase();
-      return SUPPORTED_EXTS.has(ext) && !EXCLUDED_FILES.has(base) && !f.startsWith('.');
-    }).map(f => ({ filename: f, filePath: path.join(this.dataDir, f) }));
+      if (SUPPORTED_EXTS.has(ext) && ext !== '.txt' && ext !== '.md' && !EXCLUDED_FILES.has(base)) {
+        const filePath = path.join(this.dataDir, f);
+        const mdPath = path.join(this.dataDir, path.parse(f).name + '.md');
+        
+        let needsExtraction = true;
+        if (fs.existsSync(mdPath)) {
+          const binStat = fs.statSync(filePath);
+          const mdStat = fs.statSync(mdPath);
+          if (mdStat.mtimeMs >= binStat.mtimeMs) {
+            needsExtraction = false;
+          }
+        }
+        
+        if (needsExtraction) {
+          logger.info(`[${this.agentCap} Tools] Extracting binary to MD: ${f}`);
+          try {
+            const text = await extractText(filePath);
+            if (text && text.trim().length >= 10) {
+              fs.writeFileSync(mdPath, text, 'utf-8');
+              logger.info(`[${this.agentCap} Tools] Saved converted file: ${path.basename(mdPath)}`);
+            } else {
+              logger.warn(`[${this.agentCap} Tools] Skipping (empty/unreadable): ${f}`);
+            }
+          } catch (err) {
+            logger.error(`[${this.agentCap} Tools] Failed to extract ${f}: ${err.message}`);
+          }
+        }
+      }
+    }
+
+    // 2. Collect files from data/ directory (Skip binary if .md equivalent exists)
+    const dataFiles = [];
+    const updatedRawFiles = fs.readdirSync(this.dataDir);
+    for (const f of updatedRawFiles) {
+      if (f.startsWith('.')) continue;
+      const ext = path.extname(f).toLowerCase();
+      const base = f.toLowerCase();
+      
+      if (SUPPORTED_EXTS.has(ext) && !EXCLUDED_FILES.has(base)) {
+        if (ext === '.txt' || ext === '.md') {
+          dataFiles.push({ filename: f, filePath: path.join(this.dataDir, f) });
+        } else {
+          const mdPath = path.join(this.dataDir, path.parse(f).name + '.md');
+          if (!fs.existsSync(mdPath)) {
+            dataFiles.push({ filename: f, filePath: path.join(this.dataDir, f) });
+          }
+        }
+      }
+    }
 
     // Also index .md/.txt files from memory/ — so research saved via save_memory is queryable
     const memoryFiles = [];
     if (fs.existsSync(this.memoryDir)) {
       fs.readdirSync(this.memoryDir).filter(f => {
         const ext = path.extname(f).toLowerCase();
-        return (ext === '.md' || ext === '.txt') && !f.startsWith('.');
+        return (ext === '.md' || ext === '.txt') && !f.startsWith('.') && !EXCLUDED_FILES.has(f.toLowerCase());
       }).forEach(f => {
         // Prefix name to avoid collisions with data/ files
         memoryFiles.push({ filename: `memory_${f}`, filePath: path.join(this.memoryDir, f) });
@@ -610,7 +659,7 @@ class DocumentManager {
     // Domain-Specific Core Memory (read all memory files for this agent)
     if (fs.existsSync(this.memoryDir)) {
       try {
-        const files = fs.readdirSync(this.memoryDir).filter(f => f.endsWith('.md'));
+        const files = fs.readdirSync(this.memoryDir).filter(f => f.endsWith('.md') && !EXCLUDED_FILES.has(f.toLowerCase()));
         for (const file of files) {
           const filePath = path.join(this.memoryDir, file);
           memoryStr += `[${this.agentCap} Memory: ${file}]\n` + fs.readFileSync(filePath, 'utf-8') + '\n\n';
@@ -621,6 +670,12 @@ class DocumentManager {
     }
 
     return memoryStr.trim() || null;
+  }
+
+  async toolSaveSessionHistory(input) {
+    const session = require('./session');
+    const mdContent = session.formatAsMarkdown();
+    return await this.toolCreateDocument({ filename: input.filename, content: mdContent, overwrite: true });
   }
 
   async executeTool(name, input) {
@@ -635,6 +690,7 @@ class DocumentManager {
       case 'save_memory': return this.toolSaveMemory(input);
       case 'read_memory': return this.toolReadMemory(input);
       case 'list_memories': return this.toolListMemories(input);
+      case 'save_session_history': return await this.toolSaveSessionHistory(input);
       default: return { error: `Unknown tool: ${name}` };
     }
   }

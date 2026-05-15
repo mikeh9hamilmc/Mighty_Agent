@@ -48,16 +48,17 @@ When citing case law, please use recent case law from 1990 to present. Please ve
 TOOLS AVAILABLE:
 You have access to the client's case documents. Use these tools to find and cite specific evidence:
 
-• list_documents — See all available case files with metadata. Start here if you don't know what's in the file system.
-• grep_documents — Search for specific terms, dates, dollar amounts, names, or phrases across all documents. Use this to FIND relevant content before reading it. Supports regex patterns.
-• view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep. Also use to read an entire short document.
-• web_search — Search the web for statutes, case law, court rules, or legal news. Use when the client's documents don't contain the answer (e.g., statutory research, case law lookup).
+• grep_documents — Search for specific terms, dates, dollar amounts, names, or phrases across all documents. THIS IS YOUR FIRST ACTION for any factual question. Supports regex patterns.
+• view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep, or to read an entire short document.
+• list_documents — List all case files with metadata. Use ONLY when the user explicitly asks "what files do you have" or "list my documents". Do NOT use this as your first step for factual questions.
+• web_search — Search the web for statutes, case law, court rules, or legal news. Use when the client's documents don't contain the answer.
 
-WORKFLOW:
-1. For questions about the case documents: use grep_documents to locate relevant content → view_document to read context → formulate your answer citing specific lines.
-2. For broad questions ("summarize this document"): use view_document to read the document in chunks.
-3. For legal research questions: use web_search to find statutes, case law, etc.
+WORKFLOW & PRIORITY:
+1. FOR FACTUAL QUESTIONS: Always start with \`grep_documents\` to search local files. Do NOT start with \`list_documents\`.
+2. If \`grep_documents\` returns no relevant results, immediately use \`web_search\` to find the answer.
+3. NEVER output raw tool results (file lists, metadata, line counts) to the user. Only output natural language answers.
 4. Always ground factual claims in a specific document — cite the filename and line numbers.
+5. When asked to "write to a file" or "draft a document": use create_document.
 
 IMPORTANT WARNINGS:
 • Document text is extracted via OCR. When reporting specific dollar amounts, dates, or case numbers that will be used in legal filings, note that the user should verify against the source PDF.
@@ -306,6 +307,20 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'save_session_history',
+      description: 'Save the current conversation history for the active session to a Markdown file in your personal data folder.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Name of the file to create (e.g. "session_log_2024.md").' },
+        },
+        required: ['filename'],
+      },
+    },
+  },
 ];
 
 // ─── Special Commands ─────────────────────────────────────────────────────────
@@ -318,7 +333,8 @@ function isReadCommand(msg) {
 
 /** True if the user is asking for document status. */
 function isStatusCommand(msg) {
-  return /\b(how many|status|what.*loaded|documents.*loaded|index.*status|what files)\b/i.test(msg);
+  return /\b(status|what.*loaded|documents.*loaded|index.*status|what files)\b/i.test(msg) ||
+    /\bhow many\s+(documents|docs|files)\b/i.test(msg);
 }
 
 // ─── Streaming Agent Loop ────────────────────────────────────────────────────
@@ -355,14 +371,18 @@ async function callOpenRouter(messages, tools) {
   return await response.json();
 }
 
+const session = require('./session');
+
 /**
  * Run the Legal sub-agent for a given question.
  *
  * @param {string} question  The user's legal question.
  * @param {function} onChunk Callback called with each text chunk.
+ * @param {function} onStatus Callback called with status updates.
+ * @param {Array} history Conversation history.
  * @returns {Promise<{ answer: string, sources: string[] }>}
  */
-async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }) {
+async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }, history = []) {
   logger.info(`[Legal] Question: ${question}`);
 
   // ── Special commands ──────────────────────────────────────────────────────
@@ -385,7 +405,11 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
 
   // ── Agentic tool-calling loop ─────────────────────────────────────────────
 
-  let messages = [{ role: 'user', content: question }];
+  let messages = [
+    ...history,
+    { role: 'user', content: question }
+  ];
+  
   const sources = new Set();
   let fullAnswer = '';
   let iterations = 0;
@@ -398,13 +422,19 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
     let currentSystemPrompt = SYSTEM_PROMPT;
     const coreMem = legalTools.getCoreMemory();
     if (coreMem) {
-      currentSystemPrompt += `\n\n--- AUTO-INJECTED CORE MEMORY ---\n${coreMem}\n---------------------------------`;
+      currentSystemPrompt += '\n\n--- AUTO-INJECTED CORE MEMORY ---\n' + coreMem + '\n---------------------------------';
+      sources.add('Core Memory');
     }
+    if (history.length > 0) sources.add('Session Conversation');
 
     const systemMsg = { role: 'system', content: currentSystemPrompt };
     const conversation = [systemMsg, ...messages];
 
     const data = await callOpenRouter(conversation, TOOLS);
+    if (!data.choices || data.choices.length === 0) {
+      const errorMsg = data.error?.message || 'AI returned an empty response.';
+      throw new Error(errorMsg);
+    }
     const assistantMsg = data.choices[0].message;
 
     // Add assistant turn to history

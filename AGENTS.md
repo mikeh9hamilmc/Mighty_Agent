@@ -9,40 +9,61 @@ The system is built as a modular Node.js application that bridges the gap betwee
 ### Components
 
 - **`src/index.js`**: The application entry point. It initializes the bot, starts the scheduler, and handles graceful shutdowns (SIGINT/SIGTERM).
-- **`src/scheduler.js`**: Manages time-based tasks using `node-cron`. Currently configured to send a daily 9:00 AM greeting to the authorized user.
+- **`src/scheduler.js`**: Manages time-based tasks using `node-cron`.
 - **`src/bot.js`**: Orchestrates the Telegram interaction using the `telegraf` library.
     - **Security Middleware**: Validates every incoming message against the `AUTHORIZED_USER_ID`. Unauthorized messages are silently ignored.
     - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/refresh`, `/status`, and individual commands for every enabled skill (e.g., `/dip_buy`).
     - **Natural Language Handler**: Routes all non-command text messages to the LLM layer.
 - **`src/llm.js`**: Orchestrates the Main Agent using the OpenRouter API (`@preset/mighty-agent-main`).
-    - **Agentic Loop**: Runs a tool-calling loop (up to 10 iterations) instead of a one-shot call.
+    - **Agentic Loop**: Runs a tool-calling loop (up to 15 iterations) instead of a one-shot call.
     - **Document & Memory Access**: Uses `DocumentManager` to access `skills/main/data/` and `skills/main/memory/`, giving the main agent its own persistent context.
-    - **Routing Tools**: `run_skill` (delegates to Python executor) and `ask_agent` (delegates to legal/medical/finance/code sub-agents) are real tool calls in the loop.
-    - **Skill Discovery**: Dynamically scans the `skills/` directory, excluding sub-agent folders (main/legal/medical/finance).
+    - **Routing Tools**: `run_skill` (delegates to Python executor) and `ask_agent` (delegates to legal/medical/finance/coder/travel     sub-agents) are real tool calls in the loop.
+    - **Skill Discovery**: Dynamically scans the `skills/` directory, excluding sub-agent folders (main/legal/medical/finance/coder/travel).
 - **`src/executor.js`**: Handles the actual execution of Python scripts within skills.
     - **Resolution**: Dynamically resolves the entry-point script for a given skill.
     - **Security**: Sanitizes names and enforces path restrictions.
     - **Robustness**: Implements a configurable execution timeout and forces UTF-8 encoding for cross-platform compatibility.
 - **`src/config.js`**: Centralized configuration and environment variable validation.
 - **`src/logger.js`**: Structured logging using `winston`, writing to both the console and `logs/agent.log`.
-- **`src/coder-agent.js`**: The **Coder sub-agent**. A local autonomous coding agent powered by OpenRouter (`@preset/mighty-agent-coder`).
-    - **Agentic Loop**: Runs up to 15 iterations, calling tools until the task is complete or no more tool calls are made.
-    - **Tools**: `write_file`, `read_file`, `list_files`, `execute_python` — all sandboxed to the `skills/` directory.
-    - **Skill Creation**: Can autonomously create new skills (SKILL.md + Python scripts), test them, and fix errors before reporting success.
+- **`src/coder-agent.js`**: The **Coder sub-agent**. A local autonomous coding agent.
+- **`src/legal-agent.js`**: The **Legal sub-agent**. Expert in Florida/Texas law and case document analysis.
+- **`src/medical-agent.js`**: The **Medical sub-agent**. Specialized in medical research and record analysis.
+- **`src/finance-agent.js`**: The **Finance sub-agent**. Senior strategist for investing (UPRO), real estate, and tax.
+- **`src/travel-agent.js`**: The **Travel sub-agent**. Research specialist for flights, cruises, and destination guides via Kayak.
 
 ## Workflow
+
+### User Agent Interaction
 
 1.  **Input**: User sends a message to the Telegram bot.
 2.  **Authentication**: The bot checks if the user's ID matches the `AUTHORIZED_USER_ID` in `.env`.
 3.  **Analysis**:
     - If it's a command (e.g., `/dip_buy`), it goes straight to the Executor.
     - If it's text, it's sent to the LLM with the current skill manifest (names and descriptions).
-4.  **Decision**: The LLM returns JSON indicating either a conversational `reply` or a `run` action with a specific `skill` name and `args`.
+4.  **Decision**: The LLM determines if this is a chat session or a skill execution request. If its a chat session, a new Session is started or continued and the `reply` is sent to the user. If its a skill execution request, a `run` action with a specific `skill` name and `args`.
 5.  **Execution**: (If `run`) The Executor locates the script for the specified skill, spawns a Python child process, captures output, and monitors for timeouts.
-6.  **Output**: The bot sends the conversational response or the skill's output back to the user.
+6.  **Output**: The bot sends the chat response or the skill's output back to the user.
+
+### Session
+
+1. A new Session is started if no existing Session is found. A session timer is started at the time of creation and is reset each time a message is received.
+2. A session stays active for 60 minutes after the last message.
+3. During the session, the entire conversation history is sent to the LLM with each message. 
+4. User may ask to remember key facts for this conversation and then write them to the agents memory folder.
+5. User may ask to create a new file to store the entire conversation history for the active session. This file will be stored in the agents /data folder with .md extension.
+
+### Memory
+
+1. When the program is started or refreshed, the files in /main/memory folder should be read and included in the system prompt of the Main Agent or any Sub Agent.
+2. When the user asks a sub agent for the first time in a session, the sub agent should read the memory files in its /sub agent/memory folder and include them in the system prompt of the sub agent.
+
+### Data
+
+1. When the program is started or refreshed: any new pdf, excel or word documents in all data folders should be converted to .md and included in the data cache.
+2. If user asks about records, documents, or files, the agent that is being talked to should use tools to search its /data cache or .md files to find the information and include them in the reply to the user.
 
 ### Proactive Interactions
-The agent can also initiate contact via the **Scheduler**. For example, it is configured to send a "Good morning" message every day at 9:00 AM automatically.
+The agent can also initiate contact via the **Scheduler**. For example, it is configured to send a "Good morning" message every day in the morning automatically.
 
 > [!NOTE]
 > **Telegram UI Sync**: Telegram aggressively caches the bot's command menu on the client side. If you add a new skill or perform a `/refresh` and don't see the updated commands when typing `/`, you may need to completely close and restart your Telegram app (Desktop or Mobile) to force it to fetch the new menu.
@@ -71,6 +92,15 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 4.  Restart the agent to allow it to discover the new skill.
 
 ## Change Log
+
+### 2026-05-15
+- **Dynamic Skill & Command Syncing**: Refactored `llm.js` to support live skill refreshing. The `/refresh` command now dynamically updates the Telegram slash menu to match `enabled_skills.json` without requiring a restart.
+- **Telegram Visual Feedback**: Implemented a "typing..." status indicator in the Telegram header. The bot now displays the "three dots" thinking indicator during long-running agent reasoning and local tool execution.
+- **Research Priority Optimization**: Updated system prompts for Travel, Legal, Medical, and Finance sub-agents to strictly prioritize local document research (`grep_documents`) over external web searches.
+- **Resilience & Error Handling**:
+    - Added comprehensive safety checks for OpenRouter API responses across all agents to prevent crashes on empty or malformed data.
+    - Refined internal command regex (e.g., `isStatusCommand`) to prevent false positives when users ask factual "how many" questions.
+- **Repository Hygiene**: Standardized `.gitignore` patterns across all sub-agent directories to exclude research data and caches while preserving directory structure.
 
 ### 2026-05-12
 - **Main Agent Refactor — Agentic Loop**: Refactored `llm.js` from a one-shot JSON router to a full agentic tool-calling loop.

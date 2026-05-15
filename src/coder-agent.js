@@ -165,6 +165,20 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'save_session_history',
+      description: 'Save the current conversation history for the active session to a Markdown file in your personal data folder.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Name of the file to create (e.g. "session_log_2024.md").' },
+        },
+        required: ['filename'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'write_file',
       description: 'Write content to a file inside the skills/ directory. Path must be relative to skills/ (e.g. "my-skill/SKILL.md" or "my-skill/scripts/my_script.py").',
       parameters: {
@@ -280,7 +294,7 @@ function isReadCommand(text) {
 
 // ─── Main Agent Loop ──────────────────────────────────────────────────────────
 
-async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}) {
+async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, history = []) {
   logger.info('[Coder] Starting task: ' + question);
 
   if (isReadCommand(question)) {
@@ -292,7 +306,10 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}) 
 
   await coderTools.ensureInitialized();
 
-  let messages = [{ role: 'user', content: question }];
+  let messages = [
+    ...history,
+    { role: 'user', content: question }
+  ];
   const sources = new Set();
   const filesCreated = [];
   let fullAnswer = '';
@@ -306,12 +323,18 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}) 
     const coreMem = coderTools.getCoreMemory();
     if (coreMem) {
       currentSystemPrompt += '\n\n--- AUTO-INJECTED CORE MEMORY ---\n' + coreMem + '\n---------------------------------';
+      sources.add('Core Memory');
     }
+    if (history.length > 0) sources.add('Session Conversation');
 
     const systemMsg = { role: 'system', content: currentSystemPrompt };
     const conversation = [systemMsg, ...messages];
 
     const data = await callOpenRouter(conversation, TOOLS);
+    if (!data.choices || data.choices.length === 0) {
+      const errorMsg = data.error?.message || 'AI returned an empty response.';
+      throw new Error(errorMsg);
+    }
     const assistantMsg = data.choices[0].message;
     messages.push(assistantMsg);
 
