@@ -97,9 +97,10 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 - **Dynamic Skill & Command Syncing**: Refactored `llm.js` to support live skill refreshing. The `/refresh` command now dynamically updates the Telegram slash menu to match `enabled_skills.json` without requiring a restart.
 - **Telegram Visual Feedback**: Implemented a "typing..." status indicator in the Telegram header. The bot now displays the "three dots" thinking indicator during long-running agent reasoning and local tool execution.
 - **Research Priority Optimization**: Updated system prompts for Travel, Legal, Medical, and Finance sub-agents to strictly prioritize local document research (`grep_documents`) over external web searches.
-- **Resilience & Error Handling**:
-    - Added comprehensive safety checks for OpenRouter API responses across all agents to prevent crashes on empty or malformed data.
-    - Refined internal command regex (e.g., `isStatusCommand`) to prevent false positives when users ask factual "how many" questions.
+- **Factual Query Optimization**: Updated `isStatusCommand` regex across all sub-agents to prevent "how many" factual questions from being incorrectly intercepted as document status requests.
+- **Automated Testing Suite**: Implemented a comprehensive Jest test suite (`tests/agent.test.js`) and a real-world simulation script (`test_main.js`) to verify session persistence, memory routing, and tool execution logic.
+- **Cross-Platform PDF Support**: Resolved `pdftotext` missing errors on Windows by implementing `winget` installation logic and updating error messages to provide platform-specific instructions.
+- **Telegram Message Reliability**: Fixed `MESSAGE_TOO_LONG` errors in the main agent by implementing message chunking for long conversational replies.
 - **Repository Hygiene**: Standardized `.gitignore` patterns across all sub-agent directories to exclude research data and caches while preserving directory structure.
 
 ### 2026-05-12
