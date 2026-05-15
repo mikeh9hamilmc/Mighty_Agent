@@ -15,7 +15,7 @@ const PYTHON_TIMEOUT_MS = 30_000;
 // Initialize DocumentManager for 'coder'
 const coderTools = new DocumentManager('coder');
 
-const SYSTEM_PROMPT = `You are a senior level programmer embedded in a modular AI agent system called "Mighty Agent". You can create skills similar to dip-buy.
+const SYSTEM_PROMPT = `You are a senior level programmer embedded in a modular AI agent system called "Mighty Agent". You can create skills similar to dip_buy.
 
 Your role is to create and modify agent skills. Each skill lives in its own folder under skills/:
   skills/<skill-name>/
@@ -60,10 +60,12 @@ You have access to the user's codebase, documents, and memory.
 • grep_documents — Search for specific terms across all documents.
 • view_document — Read a specific file or line range.
 • web_search — Search the web for APIs, docs, or code examples.
+• list_skills — List all available skills in the skills/ directory.
+• read_skill_file — Read the content of any file within a skill (e.g. "dip_buy/SKILL.md").
 • save_memory / read_memory / list_memories — Access persistent memory.
 
 WORKFLOW:
-1. Use grep_documents or view_document to read existing skills (like dip-buy) as a reference.
+1. Use list_skills and read_skill_file to read existing skills (like dip_buy) as a reference.
 2. Write the SKILL.md and Python script using write_file.
 3. Execute the script to verify it works using execute_python.
 4. Fix any errors and re-execute until it passes.
@@ -206,6 +208,28 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'list_skills',
+      description: 'List all skill folders in the skills/ directory.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_skill_file',
+      description: 'Read the content of a file within a skill folder.',
+      parameters: {
+        type: 'object',
+        properties: {
+          relative_path: { type: 'string', description: 'Path relative to skills/ (e.g. "dip_buy/SKILL.md").' },
+        },
+        required: ['relative_path'],
+      },
+    },
+  },
 ];
 
 
@@ -267,6 +291,28 @@ function toolExecutePython({ relative_path, args = [] }) {
       resolve({ success: false, error: err.message });
     });
   });
+}
+
+function toolListSkills() {
+  try {
+    const folders = fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name);
+    return { skills: folders };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+function toolReadSkillFile({ relative_path }) {
+  try {
+    const absPath = resolveSafe(relative_path);
+    if (!fs.existsSync(absPath)) return { error: 'File not found: ' + relative_path };
+    const content = fs.readFileSync(absPath, 'utf-8');
+    return { relative_path, content };
+  } catch (err) {
+    return { error: err.message };
+  }
 }
 
 // ─── OpenRouter Helper ────────────────────────────────────────────────────────
@@ -362,6 +408,10 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, 
         if (result.success) filesCreated.push(result.path);
       } else if (name === 'execute_python') {
         result = await toolExecutePython(args);
+      } else if (name === 'list_skills') {
+        result = toolListSkills();
+      } else if (name === 'read_skill_file') {
+        result = toolReadSkillFile(args);
       } else {
         result = await coderTools.executeTool(name, args);
       }
