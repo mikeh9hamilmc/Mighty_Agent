@@ -35,7 +35,12 @@ async function extractPdfText(filePath) {
     });
     return stdout;
   } catch (err) {
-    if (err.code === 'ENOENT') throw new Error('pdftotext not found — sudo apt-get install poppler-utils');
+    if (err.code === 'ENOENT') {
+      const installCmd = process.platform === 'win32' 
+        ? 'winget install oschwartz10612.Poppler' 
+        : 'sudo apt-get install poppler-utils';
+      throw new Error(`pdftotext not found — ${installCmd}`);
+    }
     throw err;
   }
 }
