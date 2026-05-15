@@ -377,7 +377,18 @@ bot.on('text', async (ctx) => {
     }, session.getHistory());
 
     if (decision.type === 'reply') {
-      await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, decision.text);
+      const messageChunks = [];
+      for (let i = 0; i < decision.text.length; i += 4000) {
+        messageChunks.push(decision.text.slice(i, i + 4000));
+      }
+      if (messageChunks.length === 0) messageChunks.push('_No response._');
+
+      await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, messageChunks[0]);
+      
+      for (let i = 1; i < messageChunks.length; i++) {
+        await ctx.reply(messageChunks[i]);
+      }
+
       session.addMessage('user', userMessage);
       session.addMessage('assistant', decision.text);
       return;
