@@ -102,6 +102,10 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 - **Cross-Platform PDF Support**: Resolved `pdftotext` missing errors on Windows by implementing `winget` installation logic and updating error messages to provide platform-specific instructions.
 - **Telegram Message Reliability**: Fixed `MESSAGE_TOO_LONG` errors in the main agent by implementing message chunking for long conversational replies.
 - **Repository Hygiene**: Standardized `.gitignore` patterns across all sub-agent directories to exclude research data and caches while preserving directory structure.
+- **Coder Agent — Skill Discovery & Naming Fix**: Resolved an issue where the Coder sub-agent used the outdated `dip-buy` name due to hardcoded prompt examples.
+    - Updated `SYSTEM_PROMPT` in `src/coder-agent.js` to use the correct `dip_buy` underscore convention.
+    - Implemented `list_skills` tool to allow the Coder agent to programmatically discover all active skill folders.
+    - Implemented `read_skill_file` tool to enable the agent to read source code from other skills for reference.
 
 ### 2026-05-12
 - **Main Agent Refactor — Agentic Loop**: Refactored `llm.js` from a one-shot JSON router to a full agentic tool-calling loop.
