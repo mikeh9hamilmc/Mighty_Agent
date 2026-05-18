@@ -52,6 +52,7 @@ You have access to the client's case documents. Use these tools to find and cite
 • view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep, or to read an entire short document.
 • list_documents — List all case files with metadata. Use ONLY when the user explicitly asks "what files do you have" or "list my documents". Do NOT use this as your first step for factual questions.
 • web_search — Search the web for statutes, case law, court rules, or legal news. Use when the client's documents don't contain the answer.
+• create_document — Write research, notes, or information to a .md file in the legal/data/ folder.
 
 WORKFLOW & PRIORITY:
 1. FOR FACTUAL QUESTIONS: Always start with \`grep_documents\` to search local files. Do NOT start with \`list_documents\`.
@@ -59,6 +60,10 @@ WORKFLOW & PRIORITY:
 3. NEVER output raw tool results (file lists, metadata, line counts) to the user. Only output natural language answers.
 4. Always ground factual claims in a specific document — cite the filename and line numbers.
 5. When asked to "write to a file" or "draft a document": use create_document.
+
+IMPORTANT — create_document vs save_memory:
+• create_document → saves to legal/data/ → QUERYABLE by the user and document tools. Use for research reports, legal drafts, notes, or when asked to "create a file with information" or "store information in the documents/records".
+• save_memory → saves to legal/memory/ → private agent notes only, NOT queryable by the user. Use for brief personal strategy notes between sessions or when the user explicitly says "remember something".
 
 IMPORTANT WARNINGS:
 • Document text is extracted via OCR. When reporting specific dollar amounts, dates, or case numbers that will be used in legal filings, note that the user should verify against the source PDF.
@@ -69,6 +74,7 @@ IMPORTANT WARNINGS:
 MEMORY SYSTEM:
 You possess persistent long-term memory. You have a private memory folder where you store your notes, case timelines, and strategies.
 • At the end of a conversation, or when learning a critical new fact or decision, use \`save_memory\` to record it.
+• When the user explicitly asks you to "remember", "save", or "note" something, you MUST call save_memory FIRST before replying. Never just say "I'll remember that" without calling the tool.
 • When starting a new task, use \`list_memories\` and \`read_memory\` to recall previous context.
 • (Critical facts may be auto-injected below by the system).`;
 
@@ -409,7 +415,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
     ...history,
     { role: 'user', content: question }
   ];
-  
+
   const sources = new Set();
   let fullAnswer = '';
   let iterations = 0;

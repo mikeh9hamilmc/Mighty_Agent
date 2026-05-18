@@ -71,6 +71,10 @@ WORKFLOW:
 4. Fix any errors and re-execute until it passes.
 5. Report what you built with a clear summary.
 
+IMPORTANT — write_file vs save_memory:
+• write_file → creates source code or documentation in the skills/ directory. Use when asked to "create a file with information" or "store information in the documents".
+• save_memory → saves to your private memory folder. Use when the user explicitly asks you to "remember something".
+
 IMPORTANT WARNINGS:
 • Always test your code before reporting success. Never report done unless execute_python returned exit code 0.
 • Be direct and precise. Format answers with markdown.
@@ -78,6 +82,7 @@ IMPORTANT WARNINGS:
 MEMORY SYSTEM:
 You possess persistent long-term memory. You have a private memory folder where you store notes on APIs or architectural decisions.
 • Use save_memory to record important facts.
+• When the user explicitly asks you to "remember", "save", or "note" something, you MUST call save_memory FIRST before replying. Never just say "I'll remember that" without calling the tool.
 • Use list_memories and read_memory to recall previous context.`;
 
 const TOOLS = [
