@@ -496,6 +496,19 @@ bot.on('text', async (ctx) => {
       return;
     }
 
+    // type === 'beauty' — delegate to Beauty sub-agent
+    if (decision.type === 'beauty') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinking.message_id, undefined,
+        '💄 Beauty is thinking...'
+      );
+      streamAgentResponse(ctx, thinking.message_id, decision.task, 'beauty').catch(err => {
+        logger.error(`[Beauty] Background stream error: ${err.message}`);
+        ctx.reply(`❌ Beauty agent error: ${err.message}`).catch(() => { });
+      });
+      return;
+    }
+
     // type === 'run'
     const { skill, args } = decision;
 
