@@ -82,7 +82,7 @@ IMPORTANT WARNINGS:
 MEMORY SYSTEM:
 You possess persistent long-term memory. You have a private memory folder where you store notes on APIs or architectural decisions.
 • Use save_memory to record important facts.
-• When the user explicitly asks you to "remember", "save", or "note" something, you MUST call save_memory FIRST before replying. Never just say "I'll remember that" without calling the tool.
+• When the user explicitly asks you to "remember" a fact or "make a note" of something, you MUST call save_memory FIRST before replying. Never just say "I'll remember that" without calling the tool.
 • Use list_memories and read_memory to recall previous context.`;
 
 const TOOLS = [

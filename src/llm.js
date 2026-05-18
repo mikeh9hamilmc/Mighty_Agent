@@ -187,6 +187,22 @@ function buildTools() {
         },
       },
     },
+    {
+      type: 'function',
+      function: {
+        name: 'create_document',
+        description: 'Create a new document file in the main/data/ folder. Use this to write research, notes, or information. Always use .md (Markdown) format.',
+        parameters: {
+          type: 'object',
+          properties: {
+            filename: { type: 'string', description: 'Filename for the new document (e.g. "Research.md"). Must end in .md or .txt.' },
+            content: { type: 'string', description: 'Full content of the document, written in Markdown.' },
+            overwrite: { type: 'boolean', description: 'Set to true to overwrite an existing file with the same name. Default: false.' },
+          },
+          required: ['filename', 'content'],
+        },
+      },
+    },
     // ── Memory tools ────────────────────────────────────────────────────────
     {
       type: 'function',
@@ -330,6 +346,7 @@ async function executeLocalTool(name, args) {
     case 'list_documents': return mainDocs.toolListDocuments();
     case 'grep_documents': return mainDocs.toolGrepDocuments(args);
     case 'view_document': return mainDocs.toolViewDocument(args);
+    case 'create_document': return await mainDocs.toolCreateDocument(args);
     case 'web_search': return await mainDocs.toolWebSearch(args);
     case 'save_memory': return mainDocs.toolSaveMemory(args);
     case 'read_memory': return mainDocs.toolReadMemory(args);
@@ -360,10 +377,14 @@ Workflow:
 • Always check your memory when the user references past conversations or preferences.
 
 MEMORY RULES (CRITICAL — never break these):
-• When the user asks you to remember, note, save, or store ANY information — you MUST call save_memory FIRST, then confirm. Never just say "I'll remember that" without calling the tool.
+• When the user explicitly asks you to remember, note, or store ANY information as a memory — you MUST call save_memory FIRST, then confirm. Never just say "I'll remember that" without calling the tool.
 • When the user shares personal facts (their name, preferences, dates, decisions) — proactively save them using save_memory without being asked.
 • Memory filenames should be short and descriptive (e.g. "user-name", "user-preferences", "important-dates").
-• ANY memory files listed in your CORE MEMORY section below are ALREADY FULLY LOADED. You can read them directly. DO NOT use \`view_document\`, \`grep_documents\`, or \`read_memory\` to read them. Just answer the user's question.`;
+• ANY memory files listed in your CORE MEMORY section below are ALREADY FULLY LOADED. You can read them directly. DO NOT use \`view_document\`, \`grep_documents\`, or \`read_memory\` to read them. Just answer the user's question.
+
+IMPORTANT — create_document vs save_memory:
+• create_document → saves to main/data/ → QUERYABLE by the user and document tools. Use when asked to "create a file with information", "save this to a file", or "store information in the documents".
+• save_memory → saves to main/memory/ → private agent notes. Use when the user explicitly says "remember something" or shares personal facts.`;
 
 
 /**

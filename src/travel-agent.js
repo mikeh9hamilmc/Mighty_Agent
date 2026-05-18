@@ -56,7 +56,7 @@ IMPORTANT WARNINGS:
 MEMORY SYSTEM:
 You possess persistent long-term memory. You have a private memory folder where you store brief strategic notes.
 • Use save_memory ONLY for short personal notes (preferences, past decisions, strategies) — NOT for research output.
-• When the user explicitly asks you to "remember", "save", or "note" something personal, you MUST call save_memory FIRST before replying. Never just say "I'll remember that" without calling the tool.
+• When the user explicitly asks you to "remember" a fact or "make a note" of something personal, you MUST call save_memory FIRST before replying. Never just say "I'll remember that" without calling the tool.
 • When starting a new task, use list_memories and read_memory to recall previous context.
 • (Critical facts may be auto-injected below by the system).`;
 
