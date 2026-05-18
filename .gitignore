@@ -49,7 +49,14 @@ skills/main/memory/*
 
 .venv/
 
+# Beauty sub-agent
+skills/beauty/data/*
+!skills/beauty/data/README.md
+skills/beauty/data/.beauty-cache/
+skills/beauty/memory/*
+!skills/beauty/memory/README.md
+
 # Ignore local skill configurations and history
-skills/dip-buy/scripts/dip_buy_config.json
-skills/dip-buy/scripts/purchase_ledger.json
-#skills/dip-buy/scripts/upro_history.csv
+skills/dip_buy/scripts/dip_buy_config.json
+skills/dip_buy/scripts/purchase_ledger.json
+#skills/dip_buy/scripts/upro_history.csv
