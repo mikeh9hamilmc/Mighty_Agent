@@ -101,8 +101,8 @@ bot.command('refresh', async (ctx) => {
   try {
     const summary = await refreshAllManagers();
     llm.refreshSkills();
-    await syncTelegramCommands();
-    await ctx.reply(`✅ *Agent Data Refreshed:*\n\n${summary}`, { parse_mode: 'HTML' });
+    const cmdCount = await syncTelegramCommands();
+    await ctx.reply(`✅ *Agent Data Refreshed:*\n\n${summary}\n\n🤖 _Menu synced (${cmdCount} commands)_`, { parse_mode: 'HTML' });
   } catch (err) {
     logger.error(`[Refresh] Failed: ${err.message}`);
     await ctx.reply(`❌ Refresh failed: ${err.message}`);
@@ -156,17 +156,22 @@ async function syncTelegramCommands() {
   const skillCommands = llm.SKILLS
     .filter(s => !systemCommands.some(sys => sys.command === s.name))
     .map(s => ({
-      command: s.name,
+      command: s.name.toLowerCase(),
       description: s.description.slice(0, 256), // Telegram max is 256 chars
     }));
 
   const allCommands = [...systemCommands, ...skillCommands];
 
   try {
+    // 1. Set default scope
     await bot.telegram.setMyCommands(allCommands);
+    // 2. Set all_private_chats scope (overrides chat-specific caches for DMs)
+    await bot.telegram.setMyCommands(allCommands, { scope: { type: 'all_private_chats' } });
     logger.info(`[Bot] Synced ${allCommands.length} commands to Telegram menu.`);
+    return allCommands.length;
   } catch (err) {
     logger.error(`[Bot] Failed to sync Telegram commands: ${err.message}`);
+    throw new Error(`Telegram API rejected commands: ${err.message}`);
   }
 }
 
