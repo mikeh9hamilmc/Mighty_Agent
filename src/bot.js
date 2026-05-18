@@ -136,7 +136,6 @@ function registerSkillCommands() {
       if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
       await ctx.reply(result, { parse_mode: 'Markdown' });
     });
-    logger.info(`Registered command handler for /${skill.name} (enabled: ${skill.enabled})`);
   }
 }
 registerSkillCommands();

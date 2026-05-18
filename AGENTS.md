@@ -102,6 +102,7 @@ To implement a new specialized sub-agent in the future, please strictly refer to
 
 ### 2026-05-18
 - **Documentation Overhaul & Auditing**: Conducted a comprehensive documentation review, revamping the root `README.md` to accurately reflect the modern agent architecture, prefix routing rules, active sub-agent domains (including Beauty), and the strict distinction between `/data` (records) and `/memory` (memories). Corrected outdated `node-cron` references in `AGENTS.md` to align with the active `cron` package.
+- **Logging Noise Reduction**: Removed verbose `"Registered command handler for /<skill>"` log messages from bot initialization, keeping console and log streams clean during bot startup and `/refresh` cycles.
 - **Gitignore Alignment & Cleanups**: Fixed `.gitignore` patterns where `skills/dip-buy` was incorrectly referenced instead of `skills/dip_buy` (due to the underscore refactoring on 2026-05-12). Added ignoring rules for `skills/beauty/` documents/memories to maintain repository cleanliness.
 - **Sub-Agent Development Template**: Created a standard `sub-agent-template.md` at the workspace root to outline instructions, requirements, boilerplate templates, and precise code modifications required to scale sub-agents. Added a clear directive in `AGENTS.md` to reference this guide when implementing future agents.
 - **Sub-Agent Addition — `beauty-agent`**: Implemented a specialized Beauty sub-agent (`src/beauty-agent.js`) using `@preset/mighty-agent-beauty`.
