@@ -468,7 +468,7 @@ async function decideAction(userMessage, onStatus = () => { }, history = []) {
         }
 
         if (name === 'ask_agent') {
-          const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder', travel: 'travel' };
+          const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder', travel: 'travel', beauty: 'beauty' };
           const type = agentMap[args.agent] || 'reply';
           if (type === 'reply') return { type: 'reply', text: "I wasn't sure which agent to use." };
 
