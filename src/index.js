@@ -10,6 +10,7 @@ const { medicalTools } = require('./medical-agent');
 const { financeTools } = require('./finance-agent');
 const { coderTools }   = require('./coder-agent');
 const { travelTools }  = require('./travel-agent');
+const { beautyTools }  = require('./beauty-agent');
 const { mainDocs }     = require('./llm');
 
 async function main() {
@@ -22,6 +23,7 @@ async function main() {
     financeTools.ensureInitialized(),
     coderTools.ensureInitialized(),
     travelTools.ensureInitialized(),
+    beautyTools.ensureInitialized(),
     mainDocs.ensureInitialized(),
   ]).then(() => {
     logger.info('Document caches pre-warmed for all agents.');

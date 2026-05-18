@@ -300,7 +300,7 @@ function buildTools() {
         properties: {
           agent: {
             type: 'string',
-            enum: ['legal', 'medical', 'finance', 'coder', 'travel'],
+            enum: ['legal', 'medical', 'finance', 'coder', 'travel', 'beauty'],
             description: 'The specialized agent to use.'
           },
           task: { type: 'string', description: 'The specific task, question, or request for the sub-agent.' }
@@ -367,6 +367,7 @@ You have access to:
    • "medical" — health, lab results, symptoms, prescriptions, doctor notes
    • "finance" — investing, UPRO/ETF strategy, real estate, taxes, CPA advice
    • "coder"    — writing Python scripts, creating new agent skills, programming tasks
+   • "beauty"   — skincare, makeup, botox, and anti-aging advice
 3. Runnable Python skills on the user's machine.
 
 Workflow:

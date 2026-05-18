@@ -10,6 +10,7 @@ const { runLegalAgent } = require('./legal-agent');
 const { runMedicalAgent } = require('./medical-agent');
 const { runFinanceAgent } = require('./finance-agent');
 const { runTravelAgent } = require('./travel-agent');
+const { runBeautyAgent } = require('./beauty-agent');
 const logger = require('./logger');
 const session = require('./session');
 
@@ -112,6 +113,7 @@ bot.command('refresh', async (ctx) => {
 // ─── Per-skill commands ────────────────────────────────────────────────────────
 // Registers one /command per enabled skill (skill names use underscores).
 function registerSkillCommands() {
+  const subAgents = ['legal', 'medical', 'finance', 'coder', 'travel', 'beauty'];
   const nativeCommands = ['start', 'list', 'refresh', 'status', 'clear'];
   // Register handlers for ALL discovered skills.
   // We check if they are enabled AT RUNTIME.
@@ -255,6 +257,7 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
     else if (agentName === 'finance') runAgent = runFinanceAgent;
     else if (agentName === 'coder') runAgent = runCoderAgent;
     else if (agentName === 'travel') runAgent = runTravelAgent;
+    else if (agentName === 'beauty') runAgent = runBeautyAgent;
 
     const result = await runAgent(
       question,
