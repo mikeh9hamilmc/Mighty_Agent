@@ -92,10 +92,17 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 3.  Place your Python script(s) in `skills/my-skill/scripts/`. The executor will pick the first `.py` file it finds as the entry point.
 4.  Restart the agent to allow it to discover the new skill.
 
+## Adding New Sub-Agents
+
+Specialized sub-agents (like legal, medical, finance, travel, beauty, coder) use dedicated OpenRouter presets, isolated document cache directories, and custom system-level task delegation.
+
+To implement a new specialized sub-agent in the future, please strictly refer to the step-by-step instructions, code requirements, and templates documented in [sub-agent-template.md](file:///d:/Documents/Indotraq/Software/Ramin/Mighty_Agent/sub-agent-template.md).
+
 ## Change Log
 
 ### 2026-05-18
 - **Documentation Overhaul & Auditing**: Conducted a comprehensive documentation review, revamping the root `README.md` to accurately reflect the modern agent architecture, prefix routing rules, active sub-agent domains (including Beauty), and the strict distinction between `/data` (records) and `/memory` (memories). Corrected outdated `node-cron` references in `AGENTS.md` to align with the active `cron` package.
+- **Sub-Agent Development Template**: Created a standard `sub-agent-template.md` at the workspace root to outline instructions, requirements, boilerplate templates, and precise code modifications required to scale sub-agents. Added a clear directive in `AGENTS.md` to reference this guide when implementing future agents.
 - **Sub-Agent Addition — `beauty-agent`**: Implemented a specialized Beauty sub-agent (`src/beauty-agent.js`) using `@preset/mighty-agent-beauty`.
     - Added prefix-based natural language routing (`"ask beauty: ..."`) in `bot.js`.
     - Isolated data and memory storage provided via `skills/beauty/` utilizing the `DocumentManager`.
