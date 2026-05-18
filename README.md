@@ -1,51 +1,96 @@
 # Mighty Agent
 
-A Node.js-based personal agent that uses an LLM to interpret natural language via Telegram and execute local Python scripts via modular skills.
+A modular, state-of-the-art personal assistant framework built on Node.js. It bridges the gap between conversational chat (via Telegram), structured system tool executions (via Python/Node), and domain-specific knowledge engines (via specialized sub-agents).
 
-## WSL Installation Guide
+---
 
-To install the agent on a new WSL (Ubuntu) machine, follow these steps:
+## Architecture & How It Works
 
-### 1. Clone the repository
-```bash
-# If you are copying files manually, ensure the directory structure is preserved.
-cd Mighty_Agent
-```
+The framework operates as an intelligent agentic routing loop. When a message is received in Telegram:
+1. **Dynamic Command Registration**: The bot registers dedicated commands for every active skill (e.g., `/dip_buy`, `/check_cash`). Commands like `/start`, `/list`, `/refresh`, `/status`, and `/clear` are native system commands.
+2. **Natural Language Processor (LLM Agentic Loop)**: Non-command text is analyzed by the Main Agent using **Gemini** (via OpenRouter). Instead of a one-shot response, it runs a tool-calling loop (up to 15 iterations) to execute local Python scripts (`run_skill`) or delegate to highly specialized sub-agents (`ask_agent`).
+3. **Specialized Sub-Agents**: Independent sub-agents handle domain-specific workflows. Each possesses isolated knowledge files (`data/`), private long-term memories (`memory/`), and a highly tailored system prompt.
 
-### 2. Run the Install Script
-Make the script executable and run it:
-```bash
-chmod +x install.sh
-./install.sh
-```
-This script will:
-- Install Node.js (v18) and Python3.
-- Install all NPM and Python dependencies.
-- Setup Playwright for web-scraping skills.
-- Create an initial `.env` file.
+---
 
-### 3. Configure the Agent
-Open the `.env` file and fill in your credentials:
-```bash
-nano .env
-```
-Required fields:
-- `TELEGRAM_TOKEN`: Your bot token from @BotFather.
-- `AUTHORIZED_USER_ID`: Your Telegram numeric ID.
-- `OPENROUTER_API_KEY`: Your OpenRouter API key.
+## Document & Memory Management (Critical Directories)
 
-### 4. Start the Agent
-```bash
-npm start
-```
+Each agent (including the Main Agent) manages its own workspace inside `skills/<agent_name>/`:
 
-## Running as a Background Service
-If you want the agent to run automatically in the background:
-1. Prepare the service file:
+### 1. The `data/` Folder (Records & Documents)
+* **Purpose**: Storing personal records, guidelines, receipts, reports, and source documents.
+* **Supported formats**: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.txt`, `.md`.
+* **Behavior**: Any document dropped here is automatically parsed (with layout-preserving OCR support for PDFs) and cached. Sub-agents query these using direct document searching (`grep_documents`, `view_document`) to locate factual answers.
+* **Commands to Agent**: Say *"create a file with this info"*, *"save to records"*, or *"store in my documents"*. The agent will reply: *"I noted that in your records."*
+
+### 2. The `memory/` Folder (Persistent Core Memories)
+* **Purpose**: Storing strategic insights, preferences, facts, and long-term user context.
+* **Behavior**: Written to dynamically by the agent (`save_memory`) when learning critical facts or strategic rules. This folder is private context and not directly queryable as raw records, but it is automatically injected into the agent's system prompt.
+* **Commands to Agent**: Say *"remember that..."* or *"make a note of..."*. The agent will reply: *"I noted that in my memory."*
+
+---
+
+## Active Specialized Sub-Agents
+
+You can consult any specialized agent by asking naturally (the router automatically delegates) or explicitly routing using prefixes (`ask <agent_name>: <question>`):
+
+| Prefix | Sub-Agent | Specialized Domain | Data Folder (`skills/...`) |
+| :--- | :--- | :--- | :--- |
+| **`ask legal`** | **Legal Agent** | expert in civil/family/criminal law, motion/contract drafting | `skills/legal/data/` |
+| **`ask medical`** | **Medical Agent** | medical analysis, lab results, prescriptions, symptoms | `skills/medical/data/` |
+| **`ask finance`** | **Finance Agent** | UPRO/ETF strategy, real estate CAGR, tax structures, CPA rules | `skills/finance/data/` |
+| **`ask travel`** | **Travel Agent** | flight, stay, cruise, and destination itinerary research | `skills/travel/data/` |
+| **`ask beauty`** | **Beauty Agent** | skincare routines, cosmetic chemistry, makeup, anti-aging (botox) | `skills/beauty/data/` |
+| **`ask coder`** | **Coder Agent** | local autonomous software developer (writes and edits python scripts) | `skills/coder/data/` |
+
+---
+
+## Native Commands
+
+* `/start` - Show welcoming menu.
+* `/list` - Output descriptive table of all enabled skills and capabilities.
+* `/clear` - Instantly wipe in-memory context and restart conversational session.
+* `/status` - Verify system online status and uptime diagnostics.
+* `/refresh` - Warm up all document caches, build caches, and dynamically synchronize the Telegram command slash-menu.
+
+---
+
+## Installation & Setup
+
+### WSL (Ubuntu) / Linux Installation
+
+1. **Clone & Enter Directory**:
+   ```bash
+   cd Mighty_Agent
+   ```
+2. **Execute Installer**:
+   ```bash
+   chmod +x install.sh
+   ./install.sh
+   ```
+   *This automatically provisions Node.js, Python 3, NPM/Python packages, Playwright browser binaries, and Poppler OCR support (`pdftotext`).*
+
+3. **Configure Settings**:
+   Open `.env` and fill out authorization tokens:
+   ```bash
+   nano .env
+   ```
+   Required fields:
+   * `TELEGRAM_TOKEN`: Bot token from @BotFather.
+   * `AUTHORIZED_USER_ID`: Numeric Telegram ID of owner.
+   * `OPENROUTER_API_KEY`: Key for LLM access.
+
+4. **Run the Bot**:
+   ```bash
+   npm start
+   ```
+
+### Running as a Background Daemon
+1. Build the systemd daemon script:
    ```bash
    envsubst < mighty-agent.service.template > mighty-agent.service
    ```
-2. Link it to systemd:
+2. Link it to systemctl:
    ```bash
    sudo cp mighty-agent.service /etc/systemd/system/
    sudo systemctl daemon-reload
@@ -53,24 +98,12 @@ If you want the agent to run automatically in the background:
    sudo systemctl start mighty-agent
    ```
 
-## Manual Python Usage
-If you want to run Python scripts manually or install new packages into the environment, activate it using:
-```bash
-source venv/bin/activate
-# Now you can run pip or python directly
-deactivate
-```
+---
 
-## Skills
-The agent discovers skills dynamically from the `skills/` directory. Each skill is a folder containing a `SKILL.md` definition and a `scripts/` directory with a Python entry point.
+## Developing New Skills
 
-## Document Agents (Legal & Medical)
-The system includes specialized sub-agents for legal and medical tasks. 
-To provide documents to these agents, simply place them in their respective data folders:
-- `skills/legal/data/`
-- `skills/medical/data/`
-
-**Supported file types:** `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.txt`, `.md`
-
-When a new document is added, it is automatically parsed and cached. 
-You can interact with these agents either via natural language (the system auto-routes based on context) or by explicitly prefixing your message with `"ask legal ..."` or `"ask medical ..."`.
+Mighty Agent adheres to the modular [AgentSkills specification](https://agentskills.io/specification). To add a capability:
+1. Create a folder in `skills/` (e.g., `skills/my_new_skill/`).
+2. Create a `SKILL.md` frontmatter definition mapping its usage rules.
+3. Place Python scripts in `skills/my_new_skill/scripts/`. The framework automatically resolves the first `.py` file it detects.
+4. Run `/refresh` in Telegram to register the new slash command in real-time.

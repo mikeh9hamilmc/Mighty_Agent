@@ -9,7 +9,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
 ### Components
 
 - **`src/index.js`**: The application entry point. It initializes the bot, starts the scheduler, and handles graceful shutdowns (SIGINT/SIGTERM).
-- **`src/scheduler.js`**: Manages time-based tasks using `node-cron`.
+- **`src/scheduler.js`**: Manages time-based tasks using the `cron` package.
 - **`src/bot.js`**: Orchestrates the Telegram interaction using the `telegraf` library.
     - **Security Middleware**: Validates every incoming message against the `AUTHORIZED_USER_ID`. Unauthorized messages are silently ignored.
     - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/refresh`, `/status`, `/clear`, and individual commands for every enabled skill (e.g., `/dip_buy`).
@@ -95,6 +95,7 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 ## Change Log
 
 ### 2026-05-18
+- **Documentation Overhaul & Auditing**: Conducted a comprehensive documentation review, revamping the root `README.md` to accurately reflect the modern agent architecture, prefix routing rules, active sub-agent domains (including Beauty), and the strict distinction between `/data` (records) and `/memory` (memories). Corrected outdated `node-cron` references in `AGENTS.md` to align with the active `cron` package.
 - **Sub-Agent Addition — `beauty-agent`**: Implemented a specialized Beauty sub-agent (`src/beauty-agent.js`) using `@preset/mighty-agent-beauty`.
     - Added prefix-based natural language routing (`"ask beauty: ..."`) in `bot.js`.
     - Isolated data and memory storage provided via `skills/beauty/` utilizing the `DocumentManager`.
