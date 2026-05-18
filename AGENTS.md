@@ -93,6 +93,11 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 
 ## Change Log
 
+### 2026-05-18
+- **Telegram Menu & Command Fix**: Fixed an issue in `src/bot.js` where native system commands (like `/clear`) were being incorrectly shadowed by the generic skill executor. Also resolved a duplicate command conflict in `syncTelegramCommands()` that prevented the Telegram slash menu from updating successfully.
+    - **API Scope & Cache Override**: Enforced `BotCommandScopeAllPrivateChats` in the `setMyCommands` API call to forcefully override Telegram's aggressive client-side caching and chat-specific schema conflicts.
+    - **Sync Error Routing**: Modified `syncTelegramCommands()` to throw API rejection errors natively into the chat via the `/refresh` handler instead of failing silently.
+
 ### 2026-05-17
 - **Skill Addition — `clear`**: Added a new native `clear` skill that immediately wipes the in-memory session context.
     - Added `/clear` as a native bot command in `src/bot.js` that calls `session.clear()` and replies *"🧹 Session cleared. Starting fresh!"*.
