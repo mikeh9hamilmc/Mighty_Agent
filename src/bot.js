@@ -112,9 +112,12 @@ bot.command('refresh', async (ctx) => {
 // ─── Per-skill commands ────────────────────────────────────────────────────────
 // Registers one /command per enabled skill (skill names use underscores).
 function registerSkillCommands() {
+  const nativeCommands = ['start', 'list', 'refresh', 'status', 'clear'];
   // Register handlers for ALL discovered skills.
   // We check if they are enabled AT RUNTIME.
   for (const skill of llm.ALL_SKILLS) {
+    if (nativeCommands.includes(skill.name)) continue;
+
     bot.command(skill.name, async (ctx) => {
       // Find current skill state
       const currentSkill = llm.ALL_SKILLS.find(s => s.name === skill.name);
@@ -150,10 +153,12 @@ async function syncTelegramCommands() {
     { command: 'clear',   description: 'Clear the current session context and start fresh' },
   ];
 
-  const skillCommands = llm.SKILLS.map(s => ({
-    command: s.name,
-    description: s.description.slice(0, 256), // Telegram max is 256 chars
-  }));
+  const skillCommands = llm.SKILLS
+    .filter(s => !systemCommands.some(sys => sys.command === s.name))
+    .map(s => ({
+      command: s.name,
+      description: s.description.slice(0, 256), // Telegram max is 256 chars
+    }));
 
   const allCommands = [...systemCommands, ...skillCommands];
 
