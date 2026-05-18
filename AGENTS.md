@@ -17,8 +17,8 @@ The system is built as a modular Node.js application that bridges the gap betwee
 - **`src/llm.js`**: Orchestrates the Main Agent using the OpenRouter API (`@preset/mighty-agent-main`).
     - **Agentic Loop**: Runs a tool-calling loop (up to 15 iterations) instead of a one-shot call.
     - **Document & Memory Access**: Uses `DocumentManager` to access `skills/main/data/` and `skills/main/memory/`, giving the main agent its own persistent context.
-    - **Routing Tools**: `run_skill` (delegates to Python executor) and `ask_agent` (delegates to legal/medical/finance/coder/travel     sub-agents) are real tool calls in the loop.
-    - **Skill Discovery**: Dynamically scans the `skills/` directory, excluding sub-agent folders (main/legal/medical/finance/coder/travel).
+    - **Routing Tools**: `run_skill` (delegates to Python executor) and `ask_agent` (delegates to legal/medical/finance/coder/travel/beauty sub-agents) are real tool calls in the loop.
+    - **Skill Discovery**: Dynamically scans the `skills/` directory, excluding sub-agent folders (main/legal/medical/finance/coder/travel/beauty).
 - **`src/executor.js`**: Handles the actual execution of Python scripts within skills.
     - **Resolution**: Dynamically resolves the entry-point script for a given skill.
     - **Security**: Sanitizes names and enforces path restrictions.
@@ -30,6 +30,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
 - **`src/medical-agent.js`**: The **Medical sub-agent**. Specialized in medical research and record analysis.
 - **`src/finance-agent.js`**: The **Finance sub-agent**. Senior strategist for investing (UPRO), real estate, and tax.
 - **`src/travel-agent.js`**: The **Travel sub-agent**. Research specialist for flights, cruises, and destination guides via Kayak.
+- **`src/beauty-agent.js`**: The **Beauty sub-agent**. Specialized in personalized skincare routines, makeup, and anti-aging advice.
 
 ## Workflow
 
@@ -94,6 +95,11 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 ## Change Log
 
 ### 2026-05-18
+- **Sub-Agent Addition — `beauty-agent`**: Implemented a specialized Beauty sub-agent (`src/beauty-agent.js`) using `@preset/mighty-agent-beauty`.
+    - Added prefix-based natural language routing (`"ask beauty: ..."`) in `bot.js`.
+    - Isolated data and memory storage provided via `skills/beauty/` utilizing the `DocumentManager`.
+    - Registered `beauty` formally in `ask_agent` JSON schema inside the Main LLM router.
+- **System Prompt Refinement**: Standardized constraints across all sub-agents and the Main Agent to explicitly disambiguate `create_document` from `save_memory`. Agents now forcefully respond "I noted that in my memory" (for private notes) and "I noted that in your records" (for queryable data files).
 - **Telegram Menu & Command Fix**: Fixed an issue in `src/bot.js` where native system commands (like `/clear`) were being incorrectly shadowed by the generic skill executor. Also resolved a duplicate command conflict in `syncTelegramCommands()` that prevented the Telegram slash menu from updating successfully.
     - **API Scope & Cache Override**: Enforced `BotCommandScopeAllPrivateChats` in the `setMyCommands` API call to forcefully override Telegram's aggressive client-side caching and chat-specific schema conflicts.
     - **Sync Error Routing**: Modified `syncTelegramCommands()` to throw API rejection errors natively into the chat via the `/refresh` handler instead of failing silently.
