@@ -377,6 +377,15 @@ bot.on('text', async (ctx) => {
         return;
       }
 
+      if (agentName === 'beauty') {
+        const thinking = await ctx.reply('💄 Beauty is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, question, 'beauty').catch(err => {
+          logger.error(`[Beauty] Background stream error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+        return;
+      }
+
       // Future agents: 'real-estate', etc.
     }
 
