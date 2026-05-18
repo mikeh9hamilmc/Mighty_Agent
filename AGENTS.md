@@ -12,7 +12,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
 - **`src/scheduler.js`**: Manages time-based tasks using `node-cron`.
 - **`src/bot.js`**: Orchestrates the Telegram interaction using the `telegraf` library.
     - **Security Middleware**: Validates every incoming message against the `AUTHORIZED_USER_ID`. Unauthorized messages are silently ignored.
-    - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/refresh`, `/status`, and individual commands for every enabled skill (e.g., `/dip_buy`).
+    - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/refresh`, `/status`, `/clear`, and individual commands for every enabled skill (e.g., `/dip_buy`).
     - **Natural Language Handler**: Routes all non-command text messages to the LLM layer.
 - **`src/llm.js`**: Orchestrates the Main Agent using the OpenRouter API (`@preset/mighty-agent-main`).
     - **Agentic Loop**: Runs a tool-calling loop (up to 15 iterations) instead of a one-shot call.
@@ -92,6 +92,13 @@ To add a new skill, follow the [AgentSkills specification](https://agentskills.i
 4.  Restart the agent to allow it to discover the new skill.
 
 ## Change Log
+
+### 2026-05-17
+- **Skill Addition — `clear`**: Added a new native `clear` skill that immediately wipes the in-memory session context.
+    - Added `/clear` as a native bot command in `src/bot.js` that calls `session.clear()` and replies *"🧹 Session cleared. Starting fresh!"*.
+    - Registered `/clear` in the `systemCommands` array inside `syncTelegramCommands()` so it always appears in the Telegram slash menu.
+    - Created `skills/clear/SKILL.md` so the main LLM router can match natural language requests like *"clear session"*, *"start fresh"*, or *"reset context"* to this skill.
+    - Added `clear` entry to `skills/enabled_skills.json` (enabled by default).
 
 ### 2026-05-15
 - **Dynamic Skill & Command Syncing**: Refactored `llm.js` to support live skill refreshing. The `/refresh` command now dynamically updates the Telegram slash menu to match `enabled_skills.json` without requiring a restart.

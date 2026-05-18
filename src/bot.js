@@ -147,6 +147,7 @@ async function syncTelegramCommands() {
     { command: 'list',    description: 'List all available skills' },
     { command: 'refresh', description: 'Reload all agent data and memory' },
     { command: 'status',  description: 'Show bot uptime and system info' },
+    { command: 'clear',   description: 'Clear the current session context and start fresh' },
   ];
 
   const skillCommands = llm.SKILLS.map(s => ({
@@ -163,6 +164,13 @@ async function syncTelegramCommands() {
     logger.error(`[Bot] Failed to sync Telegram commands: ${err.message}`);
   }
 }
+
+// ─── /clear ─────────────────────────────────────────────────────────────────
+bot.command('clear', async (ctx) => {
+  session.clear();
+  logger.info('[Session] Cleared by user via /clear command.');
+  await ctx.reply('🧹 *Session cleared.* Starting fresh!', { parse_mode: 'Markdown' });
+});
 
 // ─── /status ────────────────────────────────────────────────────────────────
 bot.command('status', async (ctx) => {
