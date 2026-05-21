@@ -34,9 +34,13 @@ fi
 ./.venv/bin/pip install --upgrade pip
 ./.venv/bin/pip install -r requirements.txt
 
-# ─── 5. Playwright (for weather skill) ──────────────────────────────────────
-echo "🎭 Installing Playwright browsers..."
+# ─── 5. Playwright browsers ─────────────────────────────────────────────────
+echo "🎭 Installing Playwright browsers (weather + music skills)..."
 ./.venv/bin/playwright install --with-deps chromium
+
+# ─── 6. browser-use Playwright setup ────────────────────────────────────────
+echo "🌐 Installing browser-use Playwright driver..."
+./.venv/bin/python -m playwright install chromium
 
 # ─── 6. Create .env from template ───────────────────────────────────────────
 if [ ! -f ".env" ]; then

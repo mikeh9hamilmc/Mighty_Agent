@@ -2,3 +2,7 @@ playwright==1.49.0
 ib_insync
 requests
 geopy
+beautifulsoup4
+browser-use==0.12.7
+langchain-openai
+openai==2.16.0
