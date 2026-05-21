@@ -31,8 +31,9 @@ load_dotenv(dotenv_path=os.path.abspath(env_path))
 
 # ── Defaults ───────────────────────────────────────────────────────────────────
 DEFAULT_LOCATION = "Redington Shores, FL"
-DEFAULT_LAT = 27.8406
-DEFAULT_LON = -82.8315
+#  https://gotonight.com/?view=list&date=2026-05-22&latitude=27.76683788325855&longitude=-82.7759104451111&zoom=12 
+DEFAULT_LAT = 27.76683788325855
+DEFAULT_LON = -82.7759104451111
 # Bounding box deltas for the map viewport (approx ±0.08 deg = ~9km)
 DELTA = 0.08
 

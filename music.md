@@ -13,16 +13,16 @@
 
 STEP 1: Geolocation Resolution
 - If the location is the default "Redington Shores, FL", use coordinates:
-  - Latitude: 27.8406
-  - Longitude: -82.8315
+  - Latitude: 27.76683788325855
+  - Longitude: -82.7759104451111
 - If a custom `location` is provided, use the Geocoding API/tool to resolve the location name into its precise geographic coordinates (`latitude` and `longitude`).
 
 STEP 2: URL Construction
 Construct a target URL for the GoTonight API/web interface using the following exact structure, dynamically replacing the query parameters based on Step 1 and the input date:
-URL Template: https://gotonight.com/?view=list&date=[DATE]&latitude=[LATITUDE]&longitude=[LONGITUDE]&zoom=15
+URL Template: https://gotonight.com/?view=list&date=[DATE]&latitude=[LATITUDE]&longitude=[LONGITUDE]&zoom=12
 
 Example Default URL (Redington Shores, Today):
-https://gotonight.com/?view=list&date=2026-05-21&latitude=27.8406&longitude=-82.8315&zoom=15
+https://gotonight.com/?view=list&date=2026-05-22&latitude=27.76683788325855&longitude=-82.7759104451111&zoom=12 
 
 STEP 3: Data Fetching & Extraction
 - Deploy the web-browsing/scraping tool to the constructed URL.
