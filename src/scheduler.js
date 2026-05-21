@@ -33,10 +33,10 @@ function initScheduler(bot) {
     }
   }).start();
 
-  // Task: Run "dip_buy" every hour from 4:00 AM to 8:00 PM on weekdays.
+  // Task: Run "dip_buy" every hour from 4:00 AM to 7:00 PM (hours 4 to 19) on weekdays.
   // Guard prevents overlapping runs if a previous execution is still in progress.
   let dipBuyRunning = false;
-  new CronJob('0 4-20 * * 1-5', async () => {
+  new CronJob('0 4-19 * * 1-5', async () => {
     if (!isSkillEnabled('dip_buy')) {
       logger.info('[Scheduler] Skipping dip_buy: skill is disabled.');
       return;
@@ -60,7 +60,32 @@ function initScheduler(bot) {
     }
   }).start();
 
-  logger.info('Scheduled tasks initialized (9 AM Greeting, Hourly Weekday Dip-Buy).');
+  // Task: Run "dip_buy" at 7:50 PM (19:50) on weekdays.
+  new CronJob('50 19 * * 1-5', async () => {
+    if (!isSkillEnabled('dip_buy')) {
+      logger.info('[Scheduler] Skipping dip_buy: skill is disabled.');
+      return;
+    }
+    if (dipBuyRunning) {
+      logger.warn('[Scheduler] Skipping dip_buy (7:50 PM): previous run still in progress.');
+      return;
+    }
+    dipBuyRunning = true;
+    logger.info('Running scheduled task: 7:50 PM Weekday Dip-Buy Check');
+    try {
+      const { output } = await runSkill('dip_buy', ['--silent']);
+      if (output && output.trim().length > 0) {
+        await bot.telegram.sendMessage(AUTHORIZED_USER_ID, output, { parse_mode: 'Markdown' });
+        logger.info('7:50 PM Dip-buy skill output sent to user.');
+      }
+    } catch (err) {
+      logger.error('Failed to execute 7:50 PM dip_buy skill: ' + err.message);
+    } finally {
+      dipBuyRunning = false;
+    }
+  }).start();
+
+  logger.info('Scheduled tasks initialized (9 AM Greeting, Hourly Weekday Dip-Buy, 7:50 PM Weekday Dip-Buy).');
 }
 
 module.exports = { initScheduler };
