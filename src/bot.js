@@ -130,12 +130,19 @@ function registerSkillCommands() {
 
       const args = ctx.message.text.trim().split(/\s+/).slice(1);
       await ctx.reply(`⚙️ Running \`${skill.name}\`${args.length ? ' with args: ' + args.join(' ') : ''}...`, { parse_mode: 'Markdown' });
-      const { output, exitCode, timedOut } = await runSkill(skill.name, args);
-      let result = `✅ \`${skill.name}\`\n\n`;
-      if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
-      result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
-      if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
-      await ctx.reply(result, { parse_mode: 'Markdown' });
+
+      // Show typing indicator for the duration of the skill run
+      const stopTyping = startTyping(ctx);
+      try {
+        const { output, exitCode, timedOut } = await runSkill(skill.name, args);
+        let result = `✅ \`${skill.name}\`\n\n`;
+        if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
+        result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
+        if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
+        await ctx.reply(result, { parse_mode: 'Markdown' });
+      } finally {
+        stopTyping();
+      }
     });
   }
 }
