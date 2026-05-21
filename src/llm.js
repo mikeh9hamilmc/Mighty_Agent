@@ -276,7 +276,9 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'run_skill',
-        description: `Run a local Python skill on the user's machine. Available skills: ${skillNames.length > 0 ? skillNames.join(', ') : 'none'}. Use this when the user asks for a task one of these skills can fulfill.`,
+        description: `Run a local Python skill on the user's machine. Use this when the user asks for a task one of these skills can fulfill.
+Available skills:
+${SKILLS.length > 0 ? SKILLS.map(s => `- ${s.name}: ${s.description}`).join('\n') : 'none'}`,
         parameters: {
           type: 'object',
           properties: {
@@ -432,7 +434,8 @@ async function decideAction(userMessage, onStatus = () => { }, history = []) {
         logger.info(`[Main] Iteration ${iterations}/${MAX_ITERATIONS}`);
         onStatus(`🤔 Thinking... (Step ${iterations})`);
 
-        const systemMsg = { role: 'system', content: SYSTEM_PROMPT + coreMemory };
+        const localTimeStr = new Date().toString();
+        const systemMsg = { role: 'system', content: `${SYSTEM_PROMPT}\n\nCurrent local time: ${localTimeStr}${coreMemory}` };
         const data = await callOpenRouter([systemMsg, ...messages], TOOLS);
         cancellation.check();
         if (!data.choices || data.choices.length === 0) {
