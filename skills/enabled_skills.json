@@ -15,7 +15,7 @@
     },
     "date_time": {
       "enabled": true,
-      "description": "Reads and returns the current local date and time. Use ONLY when the user explicitly asks for the current time, today's date, or a timestamp. Do not use for relative date queries (like \"tomorrow\" or \"next week\")."
+      "description": "Reads and returns the current local date and time. Use ONLY when the user explicitly asks for the current time, today's date, or a timestamp. Do NOT use if the user asks for relative dates (e.g. tomorrow, next week, yesterday) or if the query is about scheduling/searching events."
     },
     "dip_buy": {
       "enabled": false,
@@ -28,6 +28,10 @@
     "clear": {
       "enabled": true,
       "description": "Clears the current session conversation history and gives the agent a fresh context. Use when the user wants to reset context, start fresh, or forget the current conversation."
+    },
+    "music": {
+      "enabled": true,
+      "description": "Fetches live music schedules for a given location and date by scraping GoTonight. Use when the user asks about live music, bands playing nearby, concerts at bars, or local music events tonight or on a specific date. Accepts optional location (default: Redington Shores, FL) and optional date in YYYY-MM-DD format (default: today)."
     }
   }
 }
