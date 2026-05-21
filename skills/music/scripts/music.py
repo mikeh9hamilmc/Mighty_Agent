@@ -150,8 +150,19 @@ async def fetch_events(date_str: str, lat: float, lon: float) -> list[str]:
         await browser.start()
         page = await browser.new_page(url=url)
 
-        # Allow jQuery + Google Maps + page scripts to fully initialise
-        await asyncio.sleep(10)
+        # ── Wait for jQuery to be available (poll up to 30s) ──────────────────
+        jquery_ready = False
+        for attempt in range(15):  # 15 × 2s = 30s max
+            await asyncio.sleep(2)
+            check = await page.evaluate("() => typeof window.$ !== 'undefined'")
+            print(f"[music] jQuery check {attempt + 1}/15: {check}", flush=True)
+            if check.lower() == "true":
+                jquery_ready = True
+                break
+
+        if not jquery_ready:
+            print("[music] ERROR: jQuery never became available after 30s.", flush=True)
+            return []
 
         # Dismiss the cookie/promo modal if present
         await page.evaluate("""
@@ -164,17 +175,31 @@ async def fetch_events(date_str: str, lat: float, lon: float) -> list[str]:
 
         await asyncio.sleep(1)
 
-        # Fire the AJAX request inside the authenticated browser session
-        raw = await page.evaluate(ajax_script)
-        result = json.loads(raw)
+        # ── Fire the AJAX request — retry up to 3 times if empty ─────────────
+        MAX_RETRIES = 3
+        for attempt in range(MAX_RETRIES):
+            raw = await page.evaluate(ajax_script)
+            result = json.loads(raw)
 
-        if result.get("success"):
-            return result.get("data", {}).get("data") or []
-        else:
-            return []
+            if not result.get("success"):
+                print(f"[music] AJAX error (attempt {attempt + 1}): {result.get('error')}", flush=True)
+            else:
+                events = result.get("data", {}).get("data") or []
+                is_valid = result.get("data", {}).get("isRequestValid")
+                print(f"[music] AJAX attempt {attempt + 1}: isRequestValid={is_valid}, events={len(events)}", flush=True)
+                if events:
+                    return events
+
+            if attempt < MAX_RETRIES - 1:
+                print(f"[music] Empty result — waiting 5s before retry...", flush=True)
+                await asyncio.sleep(5)
+
+        print("[music] All AJAX attempts returned empty. No events found.", flush=True)
+        return []
 
     finally:
         await browser.close()
+
 
 
 # ── HTML Parsing ───────────────────────────────────────────────────────────────
