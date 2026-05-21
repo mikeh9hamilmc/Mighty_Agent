@@ -346,6 +346,142 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
   }
 }
 
+/**
+ * Executes the main agent loop and processes the resulting decision in the background.
+ */
+async function handleMainAgent(ctx, thinkingMsgId, userMessage, stopTyping) {
+  let lastStatus = '';
+  try {
+    const decision = await llm.decideAction(
+      userMessage,
+      (statusText) => {
+        if (statusText !== lastStatus) {
+          lastStatus = statusText;
+          ctx.telegram.editMessageText(ctx.chat.id, thinkingMsgId, undefined, statusText).catch(() => { });
+        }
+      },
+      session.getHistory()
+    );
+
+    if (decision.type === 'reply') {
+      const messageChunks = [];
+      for (let i = 0; i < decision.text.length; i += 4000) {
+        messageChunks.push(decision.text.slice(i, i + 4000));
+      }
+      if (messageChunks.length === 0) messageChunks.push('_No response._');
+
+      await ctx.telegram.editMessageText(ctx.chat.id, thinkingMsgId, undefined, messageChunks[0]);
+      
+      for (let i = 1; i < messageChunks.length; i++) {
+        await ctx.reply(messageChunks[i]);
+      }
+
+      session.addMessage('user', userMessage);
+      session.addMessage('assistant', decision.text);
+      return;
+    }
+
+    if (decision.type === 'error') {
+      const displayMsg = decision.text === 'Thinking interrupted.' ? '🛑 *Thinking interrupted.*' : `❌ ${decision.text}`;
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        thinkingMsgId,
+        undefined,
+        displayMsg,
+        decision.text === 'Thinking interrupted.' ? { parse_mode: 'Markdown' } : undefined
+      );
+      return;
+    }
+
+    // type === 'coder' — delegate to Coder sub-agent
+    if (decision.type === 'coder') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinkingMsgId, undefined,
+        '🧑‍💻 Coder is thinking...'
+      );
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'coder');
+      return;
+    }
+
+    // type === 'legal' — delegate to Legal sub-agent
+    if (decision.type === 'legal') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinkingMsgId, undefined,
+        '⚖️ Legal is thinking...'
+      );
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'legal');
+      return;
+    }
+
+    // type === 'medical' — delegate to Medical sub-agent
+    if (decision.type === 'medical') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinkingMsgId, undefined,
+        '🩺 Medical is thinking...'
+      );
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'medical');
+      return;
+    }
+
+    // type === 'finance' — delegate to Finance sub-agent
+    if (decision.type === 'finance') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinkingMsgId, undefined,
+        '💰 Finance is thinking...'
+      );
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'finance');
+      return;
+    }
+
+    // type === 'travel' — delegate to Travel sub-agent
+    if (decision.type === 'travel') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinkingMsgId, undefined,
+        '✈️ Travel is thinking...'
+      );
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'travel');
+      return;
+    }
+
+    // type === 'beauty' — delegate to Beauty sub-agent
+    if (decision.type === 'beauty') {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id, thinkingMsgId, undefined,
+        '💄 Beauty is thinking...'
+      );
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'beauty');
+      return;
+    }
+
+    // type === 'run'
+    const { skill, args } = decision;
+
+    await ctx.telegram.editMessageText(
+      ctx.chat.id, thinkingMsgId, undefined,
+      `⚙️ Running skill \`${skill}\`${args.length ? ` with args: ${args.join(' ')}` : ''}...`,
+      { parse_mode: 'Markdown' }
+    );
+
+    const { output, exitCode, timedOut } = await runSkill(skill, args);
+
+    let result = `✅ \`${skill}\`\n\n`;
+    if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
+    result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
+    if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
+
+    await ctx.reply(result, { parse_mode: 'Markdown' });
+    
+    session.addMessage('user', userMessage);
+    session.addMessage('assistant', `Ran skill \`${skill}\`. Output:\n${result}`);
+
+  } catch (err) {
+    logger.error(`[Main Agent] Error in decision handling: ${err.message}`);
+    ctx.reply(formatApiError(err)).catch(() => { });
+  } finally {
+    if (stopTyping) stopTyping();
+  }
+}
+
 bot.on('text', async (ctx) => {
   try {
     const rawMessage = ctx.message.text;
@@ -417,148 +553,12 @@ bot.on('text', async (ctx) => {
 
     try {
       const thinking = await ctx.reply('🤔 Thinking...');
-    let lastStatus = '';
-
-    const decision = await llm.decideAction(userMessage, (statusText) => {
-      if (statusText !== lastStatus) {
-        lastStatus = statusText;
-        ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, statusText).catch(() => { });
-      }
-    }, session.getHistory());
-
-    if (decision.type === 'reply') {
-      const messageChunks = [];
-      for (let i = 0; i < decision.text.length; i += 4000) {
-        messageChunks.push(decision.text.slice(i, i + 4000));
-      }
-      if (messageChunks.length === 0) messageChunks.push('_No response._');
-
-      await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, messageChunks[0]);
-      
-      for (let i = 1; i < messageChunks.length; i++) {
-        await ctx.reply(messageChunks[i]);
-      }
-
-      session.addMessage('user', userMessage);
-      session.addMessage('assistant', decision.text);
-      return;
-    }
-
-    if (decision.type === 'error') {
-      const displayMsg = decision.text === 'Thinking interrupted.' ? '🛑 *Thinking interrupted.*' : `❌ ${decision.text}`;
-      await ctx.telegram.editMessageText(
-        ctx.chat.id,
-        thinking.message_id,
-        undefined,
-        displayMsg,
-        decision.text === 'Thinking interrupted.' ? { parse_mode: 'Markdown' } : undefined
-      );
-      return;
-    }
-
-    // type === 'coder' — delegate to Coder sub-agent
-    if (decision.type === 'coder') {
-      await ctx.telegram.editMessageText(
-        ctx.chat.id, thinking.message_id, undefined,
-        '🧑‍💻 Coder is thinking...'
-      );
-      streamAgentResponse(ctx, thinking.message_id, decision.task, 'coder').catch(err => {
-        logger.error(`[Coder] Background stream error: ${err.message}`);
-        ctx.reply(formatApiError(err)).catch(() => { });
+      handleMainAgent(ctx, thinking.message_id, userMessage, stopTyping).catch(err => {
+        logger.error(`[Main] Background execution error: ${err.message}`);
       });
-      return;
-    }
-
-    // type === 'legal' — delegate to Legal sub-agent
-    if (decision.type === 'legal') {
-      await ctx.telegram.editMessageText(
-        ctx.chat.id, thinking.message_id, undefined,
-        '⚖️ Legal is thinking...'
-      );
-      // Fire in background — do NOT await (same timeout reason as above)
-      streamAgentResponse(ctx, thinking.message_id, decision.task, 'legal').catch(err => {
-        logger.error(`[Legal] Background stream error: ${err.message}`);
-        ctx.reply(`❌ Legal agent error: ${err.message}`).catch(() => { });
-      });
-      return;
-    }
-
-    // type === 'medical' — delegate to Medical sub-agent
-    if (decision.type === 'medical') {
-      await ctx.telegram.editMessageText(
-        ctx.chat.id, thinking.message_id, undefined,
-        '🩺 Medical is thinking...'
-      );
-      // Fire in background — do NOT await
-      streamAgentResponse(ctx, thinking.message_id, decision.task, 'medical').catch(err => {
-        logger.error(`[Medical] Background stream error: ${err.message}`);
-        ctx.reply(`❌ Medical agent error: ${err.message}`).catch(() => { });
-      });
-      return;
-    }
-    // type === 'finance' — delegate to Finance sub-agent
-    if (decision.type === 'finance') {
-      await ctx.telegram.editMessageText(
-        ctx.chat.id, thinking.message_id, undefined,
-        '💰 Finance is thinking...'
-      );
-      // Fire in background
-      streamAgentResponse(ctx, thinking.message_id, decision.task, 'finance').catch(err => {
-        logger.error(`[Finance] Background stream error: ${err.message}`);
-        ctx.reply(`❌ Finance agent error: ${err.message}`).catch(() => { });
-      });
-      return;
-    }
-
-    // type === 'travel' — delegate to Travel sub-agent
-    if (decision.type === 'travel') {
-      await ctx.telegram.editMessageText(
-        ctx.chat.id, thinking.message_id, undefined,
-        '✈️ Travel is thinking...'
-      );
-      streamAgentResponse(ctx, thinking.message_id, decision.task, 'travel').catch(err => {
-        logger.error(`[Travel] Background stream error: ${err.message}`);
-        ctx.reply(`❌ Travel agent error: ${err.message}`).catch(() => { });
-      });
-      return;
-    }
-
-    // type === 'beauty' — delegate to Beauty sub-agent
-    if (decision.type === 'beauty') {
-      await ctx.telegram.editMessageText(
-        ctx.chat.id, thinking.message_id, undefined,
-        '💄 Beauty is thinking...'
-      );
-      streamAgentResponse(ctx, thinking.message_id, decision.task, 'beauty').catch(err => {
-        logger.error(`[Beauty] Background stream error: ${err.message}`);
-        ctx.reply(`❌ Beauty agent error: ${err.message}`).catch(() => { });
-      });
-      return;
-    }
-
-    // type === 'run'
-    const { skill, args } = decision;
-
-    await ctx.telegram.editMessageText(
-      ctx.chat.id, thinking.message_id, undefined,
-      `⚙️ Running skill \`${skill}\`${args.length ? ` with args: ${args.join(' ')}` : ''}...`,
-      { parse_mode: 'Markdown' }
-    );
-
-    const { output, exitCode, timedOut } = await runSkill(skill, args);
-
-    let result = `✅ \`${skill}\`\n\n`;
-    if (timedOut) result = `⏱ *Skill timed out.*\n\n`;
-    result += output.length > 0 ? `\`\`\`\n${output.slice(0, 3800)}\n\`\`\`` : '_No output._';
-    if (exitCode !== 0 && !timedOut) result += `\n\n⚠️ Exit code: ${exitCode}`;
-
-    await ctx.reply(result, { parse_mode: 'Markdown' });
-    
-    session.addMessage('user', userMessage);
-    session.addMessage('assistant', `Ran skill \`${skill}\`. Output:\n${result}`);
-
-    } finally {
+    } catch (err) {
       if (stopTyping) stopTyping();
+      throw err;
     }
   } catch (err) {
     logger.error(`[Bot] Unhandled text handler error: ${err.message}`);
