@@ -22,9 +22,10 @@ const { OPENROUTER_API_KEY } = require('./config');
 const { DocumentManager } = require('./document-tools');
 const legalTools = new DocumentManager('legal');
 const logger = require('./logger');
+const cancellation = require('./cancellation');
 
 const LEGAL_MODEL = '@preset/mighty-agent-legal';
-const MAX_ITERATIONS = 15;
+const MAX_ITERATIONS = 30;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
@@ -421,6 +422,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
   let iterations = 0;
 
   while (iterations < MAX_ITERATIONS) {
+    cancellation.check();
     iterations++;
     logger.info(`[Legal] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
@@ -437,6 +439,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
     const conversation = [systemMsg, ...messages];
 
     const data = await callOpenRouter(conversation, TOOLS);
+    cancellation.check();
     if (!data.choices || data.choices.length === 0) {
       const errorMsg = data.error?.message || 'AI returned an empty response.';
       throw new Error(errorMsg);
@@ -459,6 +462,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
 
     // Execute tool calls
     for (const toolCall of assistantMsg.tool_calls) {
+      cancellation.check();
       const { name, arguments: argsJson } = toolCall.function;
       let args;
       try {
@@ -470,6 +474,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
       logger.info(`[Legal] Tool call: ${name} ${argsJson}`);
       onStatus(`🛠️ Tool call: ${name}`);
       const result = await legalTools.executeTool(name, args);
+      cancellation.check();
 
       // Track sources from document tools
       if (name === 'view_document' && result.filename) {

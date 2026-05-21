@@ -19,9 +19,10 @@ const path = require('path');
 const { OPENROUTER_API_KEY, SKILLS_DIR } = require('./config');
 const { DocumentManager } = require('./document-tools');
 const logger = require('./logger');
+const cancellation = require('./cancellation');
 
 const MAIN_MODEL = '@preset/mighty-agent-main';
-const MAX_ITERATIONS = 10;
+const MAX_ITERATIONS = 30;
 
 // ─── Document/Memory access for Main Agent ────────────────────────────────────
 
@@ -401,103 +402,115 @@ IMPORTANT — create_document vs save_memory:
  *   { type: 'error',   text: '...' }
  */
 async function decideAction(userMessage, onStatus = () => { }, history = []) {
-  const TOOLS = buildTools();
-
-  let coreMemory = '';
-  let sources = new Set();
-  if (history.length > 0) sources.add('Session Conversation');
-
+  cancellation.setActive(true);
   try {
-    const cm = mainDocs.getCoreMemory();
-    if (cm) {
-      coreMemory = `\n\n--- CORE MEMORY ---\n${cm}\n-------------------`;
-      sources.add('Core Memory');
-    }
-  } catch (_) { }
+    const TOOLS = buildTools();
 
-  const messages = [
-    ...history,
-    { role: 'user', content: userMessage },
-  ];
+    let coreMemory = '';
+    let sources = new Set();
+    if (history.length > 0) sources.add('Session Conversation');
 
-  let iterations = 0;
-
-  try {
-    while (iterations < MAX_ITERATIONS) {
-      iterations++;
-      logger.info(`[Main] Iteration ${iterations}/${MAX_ITERATIONS}`);
-      onStatus(`🤔 Thinking... (Step ${iterations})`);
-
-      const systemMsg = { role: 'system', content: SYSTEM_PROMPT + coreMemory };
-      const data = await callOpenRouter([systemMsg, ...messages], TOOLS);
-      if (!data.choices || data.choices.length === 0) {
-        const errorMsg = data.error?.message || 'AI returned an empty response.';
-        throw new Error(errorMsg);
+    try {
+      const cm = mainDocs.getCoreMemory();
+      if (cm) {
+        coreMemory = `\n\n--- CORE MEMORY ---\n${cm}\n-------------------`;
+        sources.add('Core Memory');
       }
-      const assistantMsg = data.choices[0].message;
+    } catch (_) { }
 
-      messages.push(assistantMsg);
+    const messages = [
+      ...history,
+      { role: 'user', content: userMessage },
+    ];
 
-      // No tool calls → plain conversational reply
-      if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
-        const text = assistantMsg.content || "I wasn't sure what to do. Could you rephrase?";
-        const sourcesStr = sources.size > 0 ? Array.from(sources).join(', ') : 'Internal Knowledge';
-        logger.info(`[Main] Conversational reply [Sources: ${sourcesStr}]: ${text.slice(0, 80)}`);
-        return { type: 'reply', text };
-      }
+    let iterations = 0;
 
-      // Process each tool call
-      for (const toolCall of assistantMsg.tool_calls) {
-        const { name, arguments: argsJson } = toolCall.function;
-        let args = {};
-        try { args = JSON.parse(argsJson); } catch (_) { }
+    try {
+      while (iterations < MAX_ITERATIONS) {
+        cancellation.check();
+        iterations++;
+        logger.info(`[Main] Iteration ${iterations}/${MAX_ITERATIONS}`);
+        onStatus(`🤔 Thinking... (Step ${iterations})`);
 
-        logger.info(`[Main] Tool call: ${name} ${argsJson}`);
-        
-        if (name === 'web_search') sources.add('Web Search');
-        if (name === 'read_memory' || name === 'list_memories') sources.add('Memory Tool');
-        if (name === 'view_document' || name === 'grep_documents' || name === 'list_documents') sources.add('Data File');
+        const systemMsg = { role: 'system', content: SYSTEM_PROMPT + coreMemory };
+        const data = await callOpenRouter([systemMsg, ...messages], TOOLS);
+        cancellation.check();
+        if (!data.choices || data.choices.length === 0) {
+          const errorMsg = data.error?.message || 'AI returned an empty response.';
+          throw new Error(errorMsg);
+        }
+        const assistantMsg = data.choices[0].message;
 
-        // ── Routing tools: return immediately without adding tool result ──
-        if (name === 'run_skill') {
-          return {
-            type: 'run',
-            skill: args.skill,
-            args: Array.isArray(args.args) ? args.args : [],
-          };
+        messages.push(assistantMsg);
+
+        // No tool calls → plain conversational reply
+        if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+          const text = assistantMsg.content || "I wasn't sure what to do. Could you rephrase?";
+          const sourcesStr = sources.size > 0 ? Array.from(sources).join(', ') : 'Internal Knowledge';
+          logger.info(`[Main] Conversational reply [Sources: ${sourcesStr}]: ${text.slice(0, 80)}`);
+          return { type: 'reply', text };
         }
 
-        if (name === 'ask_agent') {
-          const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder', travel: 'travel', beauty: 'beauty' };
-          const type = agentMap[args.agent] || 'reply';
-          if (type === 'reply') return { type: 'reply', text: "I wasn't sure which agent to use." };
+        // Process each tool call
+        for (const toolCall of assistantMsg.tool_calls) {
+          cancellation.check();
+          const { name, arguments: argsJson } = toolCall.function;
+          let args = {};
+          try { args = JSON.parse(argsJson); } catch (_) { }
 
-          // Inject main memory so sub-agents have user context (name, preferences, etc.)
-          let task = args.task;
-          const mainMemory = mainDocs.getCoreMemory();
-          if (mainMemory) {
-            task = `[Context from main agent memory — use this to personalise your response]\n${mainMemory}\n\n[User request]\n${task}`;
+          logger.info(`[Main] Tool call: ${name} ${argsJson}`);
+          
+          if (name === 'web_search') sources.add('Web Search');
+          if (name === 'read_memory' || name === 'list_memories') sources.add('Memory Tool');
+          if (name === 'view_document' || name === 'grep_documents' || name === 'list_documents') sources.add('Data File');
+
+          // ── Routing tools: return immediately without adding tool result ──
+          if (name === 'run_skill') {
+            return {
+              type: 'run',
+              skill: args.skill,
+              args: Array.isArray(args.args) ? args.args : [],
+            };
           }
-          return { type, task };
+
+          if (name === 'ask_agent') {
+            const agentMap = { legal: 'legal', medical: 'medical', finance: 'finance', coder: 'coder', travel: 'travel', beauty: 'beauty' };
+            const type = agentMap[args.agent] || 'reply';
+            if (type === 'reply') return { type: 'reply', text: "I wasn't sure which agent to use." };
+
+            // Inject main memory so sub-agents have user context (name, preferences, etc.)
+            let task = args.task;
+            const mainMemory = mainDocs.getCoreMemory();
+            if (mainMemory) {
+              task = `[Context from main agent memory — use this to personalise your response]\n${mainMemory}\n\n[User request]\n${task}`;
+            }
+            return { type, task };
+          }
+
+          // ── Local tool: execute and feed result back ──────────────────────
+          onStatus(`🛠️ Tool call: ${name}`);
+          const result = await executeLocalTool(name, args);
+          cancellation.check();
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name,
+            content: JSON.stringify(result),
+          });
         }
-
-        // ── Local tool: execute and feed result back ──────────────────────
-        onStatus(`🛠️ Tool call: ${name}`);
-        const result = await executeLocalTool(name, args);
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name,
-          content: JSON.stringify(result),
-        });
       }
+
+      return { type: 'reply', text: '⚠️ Main agent reached the iteration limit. Try rephrasing.' };
+
+    } catch (err) {
+      logger.error(`[Main] Error: ${err.message}`);
+      if (err.message === 'Interrupted') {
+        return { type: 'error', text: 'Thinking interrupted.' };
+      }
+      return { type: 'error', text: `LLM error: ${err.message}` };
     }
-
-    return { type: 'reply', text: '⚠️ Main agent reached the iteration limit. Try rephrasing.' };
-
-  } catch (err) {
-    logger.error(`[Main] Error: ${err.message}`);
-    return { type: 'error', text: `LLM error: ${err.message}` };
+  } finally {
+    cancellation.setActive(false);
   }
 }
 

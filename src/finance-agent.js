@@ -20,9 +20,10 @@ const { OPENROUTER_API_KEY } = require('./config');
 const { DocumentManager } = require('./document-tools');
 const financeTools = new DocumentManager('finance');
 const logger = require('./logger');
+const cancellation = require('./cancellation');
 
 const FINANCE_MODEL = '@preset/mighty-agent-finance';
-const MAX_ITERATIONS = 15;
+const MAX_ITERATIONS = 30;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
@@ -265,6 +266,7 @@ async function runFinanceAgent(question, onChunk = () => { }, onStatus = () => {
   let iterations = 0;
 
   while (iterations < MAX_ITERATIONS) {
+    cancellation.check();
     iterations++;
     logger.info(`[Finance] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
@@ -280,6 +282,7 @@ async function runFinanceAgent(question, onChunk = () => { }, onStatus = () => {
     const conversation = [systemMsg, ...messages];
 
     const data = await callOpenRouter(conversation, TOOLS);
+    cancellation.check();
     if (!data.choices || data.choices.length === 0) {
       const errorMsg = data.error?.message || 'AI returned an empty response.';
       throw new Error(errorMsg);
@@ -298,6 +301,7 @@ async function runFinanceAgent(question, onChunk = () => { }, onStatus = () => {
     }
 
     for (const toolCall of assistantMsg.tool_calls) {
+      cancellation.check();
       const { name, arguments: argsJson } = toolCall.function;
       let args = {};
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
@@ -305,6 +309,7 @@ async function runFinanceAgent(question, onChunk = () => { }, onStatus = () => {
       logger.info(`[Finance] Tool call: ${name} ${argsJson}`);
       onStatus(`🛠️ Tool call: ${name}`);
       const result = await financeTools.executeTool(name, args);
+      cancellation.check();
 
       if (name === 'view_document' && result.filename) sources.add(result.filename);
       if (name === 'grep_documents' && result.matches) result.matches.forEach(m => sources.add(m.file));

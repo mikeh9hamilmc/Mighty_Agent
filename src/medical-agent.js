@@ -18,9 +18,10 @@ const { OPENROUTER_API_KEY } = require('./config');
 const { DocumentManager } = require('./document-tools');
 const medicalTools = new DocumentManager('medical');
 const logger = require('./logger');
+const cancellation = require('./cancellation');
 
 const MEDICAL_MODEL = '@preset/mighty-agent-medical';
-const MAX_ITERATIONS = 15;
+const MAX_ITERATIONS = 30;
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
@@ -393,6 +394,7 @@ async function runMedicalAgent(question, onChunk = () => { }, onStatus = () => {
   let iterations = 0;
 
   while (iterations < MAX_ITERATIONS) {
+    cancellation.check();
     iterations++;
     logger.info(`[Medical] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
@@ -409,6 +411,7 @@ async function runMedicalAgent(question, onChunk = () => { }, onStatus = () => {
     const conversation = [systemMsg, ...messages];
 
     const data = await callOpenRouter(conversation, TOOLS);
+    cancellation.check();
     if (!data.choices || data.choices.length === 0) {
       const errorMsg = data.error?.message || 'AI returned an empty response.';
       throw new Error(errorMsg);
@@ -431,6 +434,7 @@ async function runMedicalAgent(question, onChunk = () => { }, onStatus = () => {
 
     // Execute tool calls
     for (const toolCall of assistantMsg.tool_calls) {
+      cancellation.check();
       const { name, arguments: argsJson } = toolCall.function;
       let args;
       try {
@@ -442,6 +446,7 @@ async function runMedicalAgent(question, onChunk = () => { }, onStatus = () => {
       logger.info(`[Medical] Tool call: ${name} ${argsJson}`);
       onStatus(`🛠️ Tool call: ${name}`);
       const result = await medicalTools.executeTool(name, args);
+      cancellation.check();
 
       // Track sources from document tools
       if (name === 'view_document' && result.filename) {

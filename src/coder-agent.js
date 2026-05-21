@@ -9,8 +9,9 @@ const logger = require('./logger');
 const { DocumentManager } = require('./document-tools');
 
 const CODER_MODEL = '@preset/mighty-agent-coder';
-const MAX_ITERATIONS = 15;
+const MAX_ITERATIONS = 30;
 const PYTHON_TIMEOUT_MS = 30_000;
+const cancellation = require('./cancellation');
 
 // Initialize DocumentManager for 'coder'
 const coderTools = new DocumentManager('coder');
@@ -367,6 +368,7 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, 
   let iterations = 0;
 
   while (iterations < MAX_ITERATIONS) {
+    cancellation.check();
     iterations++;
     logger.info('[Coder] Iteration ' + iterations + '/' + MAX_ITERATIONS);
 
@@ -382,6 +384,7 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, 
     const conversation = [systemMsg, ...messages];
 
     const data = await callOpenRouter(conversation, TOOLS);
+    cancellation.check();
     if (!data.choices || data.choices.length === 0) {
       const errorMsg = data.error?.message || 'AI returned an empty response.';
       throw new Error(errorMsg);
@@ -400,6 +403,7 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, 
     }
 
     for (const toolCall of assistantMsg.tool_calls) {
+      cancellation.check();
       const { name, arguments: argsJson } = toolCall.function;
       let args = {};
       try { args = JSON.parse(argsJson); } catch (e) { args = {}; }
@@ -420,6 +424,7 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, 
       } else {
         result = await coderTools.executeTool(name, args);
       }
+      cancellation.check();
 
       if (name === 'view_document' && result.filename) sources.add(result.filename);
       if (name === 'grep_documents' && result.matches) result.matches.forEach(m => sources.add(m.file));

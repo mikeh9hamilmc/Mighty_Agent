@@ -13,6 +13,7 @@ const { runTravelAgent } = require('./travel-agent');
 const { runBeautyAgent } = require('./beauty-agent');
 const logger = require('./logger');
 const session = require('./session');
+const cancellation = require('./cancellation');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const startTime = Date.now();
@@ -152,6 +153,7 @@ async function syncTelegramCommands() {
     { command: 'refresh', description: 'Reload all agent data and memory' },
     { command: 'status',  description: 'Show bot uptime and system info' },
     { command: 'clear',   description: 'Clear the current session context and start fresh' },
+    { command: 'stop',    description: 'Stop current thinking/execution' },
   ];
 
   const skillCommands = llm.SKILLS
@@ -181,6 +183,17 @@ bot.command('clear', async (ctx) => {
   session.clear();
   logger.info('[Session] Cleared by user via /clear command.');
   await ctx.reply('🧹 *Session cleared.* Starting fresh!', { parse_mode: 'Markdown' });
+});
+
+// ─── /stop ──────────────────────────────────────────────────────────────────
+bot.command('stop', async (ctx) => {
+  if (cancellation.isActive()) {
+    cancellation.requestStop();
+    logger.info('[Bot] Stop requested via /stop command.');
+    await ctx.reply('🛑 *Interrupting thinking...*', { parse_mode: 'Markdown' });
+  } else {
+    await ctx.reply('ℹ️ No active thinking session to stop.', { parse_mode: 'Markdown' });
+  }
 });
 
 // ─── /status ────────────────────────────────────────────────────────────────
@@ -258,6 +271,7 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
     else if (agentName === 'travel') runAgent = runTravelAgent;
     else if (agentName === 'beauty') runAgent = runBeautyAgent;
 
+    cancellation.setActive(true);
     const result = await runAgent(
       question,
       (chunk) => { accumulated += chunk; },
@@ -271,9 +285,16 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
       session.addMessage('user', question);
       session.addMessage('assistant', accumulated);
     }
+  } catch (err) {
+    if (err.message === 'Interrupted') {
+      accumulated = '🛑 *Thinking interrupted.*';
+    } else {
+      throw err;
+    }
   } finally {
     clearInterval(interval);
     stopTyping();
+    cancellation.setActive(false);
   }
 
   // Final edit with full answer (split if over Telegram's 4096 limit)
@@ -424,7 +445,14 @@ bot.on('text', async (ctx) => {
     }
 
     if (decision.type === 'error') {
-      await ctx.telegram.editMessageText(ctx.chat.id, thinking.message_id, undefined, `❌ ${decision.text}`);
+      const displayMsg = decision.text === 'Thinking interrupted.' ? '🛑 *Thinking interrupted.*' : `❌ ${decision.text}`;
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        thinking.message_id,
+        undefined,
+        displayMsg,
+        decision.text === 'Thinking interrupted.' ? { parse_mode: 'Markdown' } : undefined
+      );
       return;
     }
 
