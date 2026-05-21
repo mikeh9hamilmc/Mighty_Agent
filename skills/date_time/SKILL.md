@@ -1,6 +1,6 @@
 ---
 name: date_time
-description: Reads and returns the current local date and time. Use ONLY when the user explicitly asks for the current time, today's date, or a timestamp. Do not use for relative date queries (like "tomorrow" or "next week").
+description: Reads and returns the current local date and time. Use ONLY when the user explicitly asks for the current time, today's date, or a timestamp. Do NOT use if the user asks for relative dates (e.g. tomorrow, next week, yesterday) or if the query is about scheduling/searching events.
 license: MIT
 compatibility: Requires Python 3.x
 metadata:
