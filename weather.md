@@ -1,7 +1,5 @@
----
-name: weather
-description: Fetches real-time local weather data including temperature, humidity, wind, and precipitation probability for a specified location. Defaults to Redington Shores, FL if no location is provided.
----
+# Name: weather
+# Description: Fetches real-time local weather data including temperature, humidity, wind, and precipitation probability for a specified location. Defaults to Redington Shores, FL if no location is provided.
 
 ## Goal
 To quickly retrieve and format highly accurate, real-time weather metrics for the user's requested location, maintaining a clean fall-back location configuration.
