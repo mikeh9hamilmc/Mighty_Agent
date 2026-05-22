@@ -100,9 +100,16 @@ AJAX_SCRIPT_TEMPLATE = """\
         resolve(JSON.stringify({{ error: 'jQuery not loaded' }}));
         return;
     }}
+
+    // Extract the ASP.NET anti-forgery token from meta tag or hidden input
+    const metaToken = document.querySelector('meta[name="__RequestVerificationToken"]');
+    const inputToken = document.querySelector('input[name="__RequestVerificationToken"]');
+    const csrfToken = (metaToken && metaToken.content) || (inputToken && inputToken.value) || '';
+
     $.ajax({{
         type: 'POST',
         url: '/Map/ReadEventViews',
+        headers: csrfToken ? {{ 'RequestVerificationToken': csrfToken }} : {{}},
         data: {{
             "date": "{date}T00:00:00.000Z",
             "isToday": "{is_today}",
@@ -115,7 +122,7 @@ AJAX_SCRIPT_TEMPLATE = """\
             "bounds[southEast][longitude]": "{east}",
             "zoom": "12"
         }},
-        success: function(data) {{ resolve(JSON.stringify({{ success: true, data: data }})); }},
+        success: function(data) {{ resolve(JSON.stringify({{ success: true, data: data, token_found: !!csrfToken }})); }},
         error: function(xhr, status, err) {{ resolve(JSON.stringify({{ success: false, error: status + ': ' + err }})); }}
     }});
 }})
@@ -179,7 +186,8 @@ async def fetch_events(date_str: str, lat: float, lon: float) -> list[str]:
         }
         """)
 
-        await asyncio.sleep(1)
+        # Give the page a moment to fully initialise after jQuery is ready
+        await asyncio.sleep(3)
 
         # ── Fire the AJAX request — retry up to 3 times if empty ─────────────
         MAX_RETRIES = 3
@@ -192,7 +200,8 @@ async def fetch_events(date_str: str, lat: float, lon: float) -> list[str]:
             else:
                 events = result.get("data", {}).get("data") or []
                 is_valid = result.get("data", {}).get("isRequestValid")
-                print(f"[music] AJAX attempt {attempt + 1}: isRequestValid={is_valid}, events={len(events)}", flush=True, file=sys.stderr)
+                token_found = result.get("token_found", False)
+                print(f"[music] AJAX attempt {attempt + 1}: isRequestValid={is_valid}, token_found={token_found}, events={len(events)}", flush=True, file=sys.stderr)
                 if events:
                     return events
 
