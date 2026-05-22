@@ -15,7 +15,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
     - **Command Handlers**: Manages explicit commands like `/start`, `/list`, `/refresh`, `/status`, `/clear`, and individual commands for every enabled skill (e.g., `/dip_buy`).
     - **Natural Language Handler**: Routes all non-command text messages to the LLM layer.
 - **`src/llm.js`**: Orchestrates the Main Agent using the OpenRouter API (`@preset/mighty-agent-main`).
-    - **Agentic Loop**: Runs a tool-calling loop (up to 15 iterations) instead of a one-shot call.
+    - **Agentic Loop**: Runs a tool-calling loop (up to 30 iterations) instead of a one-shot call.
     - **Document & Memory Access**: Uses `DocumentManager` to access `skills/main/data/` and `skills/main/memory/`, giving the main agent its own persistent context.
     - **Routing Tools**: `run_skill` (delegates to Python executor) and `ask_agent` (delegates to legal/medical/finance/coder/travel/beauty sub-agents) are real tool calls in the loop.
     - **Skill Discovery**: Dynamically scans the `skills/` directory, excluding sub-agent folders (main/legal/medical/finance/coder/travel/beauty).
@@ -23,6 +23,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
     - **Resolution**: Dynamically resolves the entry-point script for a given skill.
     - **Security**: Sanitizes names and enforces path restrictions.
     - **Robustness**: Implements a configurable execution timeout and forces UTF-8 encoding for cross-platform compatibility.
+    - **Output Isolation**: Only `stdout` is returned to the user. `stderr` is routed to the agent debug log (`logger.debug`) so diagnostic prints from skill scripts never reach Telegram.
 - **`src/config.js`**: Centralized configuration and environment variable validation.
 - **`src/logger.js`**: Structured logging using `winston`, writing to both the console and `logs/agent.log`.
 - **`src/coder-agent.js`**: The **Coder sub-agent**. A local autonomous coding agent.
@@ -64,7 +65,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
 2. If user asks about records, documents, or files, the agent that is being talked to should use tools to search its /data cache or .md files to find the information and include them in the reply to the user.
 
 ### Proactive Interactions
-The agent can also initiate contact via the **Scheduler**. For example, it is configured to send a "Good morning" message every day in the morning automatically.
+The agent can also initiate contact via the **Scheduler**. It is configured to send a "Good morning" message every day at **8:30 AM** (cron `30 8 * * *`), which runs the `good_morning` skill (greeting + live weather report). Weekday hourly and 7:50 PM runs of the `dip_buy` skill are also scheduled.
 
 > [!NOTE]
 > **Telegram UI Sync**: Telegram aggressively caches the bot's command menu on the client side. If you add a new skill or perform a `/refresh` and don't see the updated commands when typing `/`, you may need to completely close and restart your Telegram app (Desktop or Mobile) to force it to fetch the new menu.
@@ -99,6 +100,15 @@ Specialized sub-agents (like legal, medical, finance, travel, beauty, coder) use
 To implement a new specialized sub-agent in the future, please strictly refer to the step-by-step instructions, code requirements, and templates documented in [sub-agent-template.md](file:///d:/Documents/Indotraq/Software/Ramin/Mighty_Agent/sub-agent-template.md).
 
 ## Change Log
+
+### 2026-05-22
+- **Fix — `good_morning` skill**: Corrected broken weather integration. The script was looking for `get_weather.py` (non-existent); fixed to `weather.py`. Replaced subprocess call with a direct Python module import so the structured dict is formatted as Markdown before being sent to Telegram (e.g., temperature, humidity, wind, rain chance).
+- **Fix — `scheduler.js`**: Changed the `good_morning` cron from `0 9 * * *` (9:00 AM) to `30 8 * * *` (8:30 AM).
+- **Fix — `executor.js` stderr leak**: `stderr` was being merged into `stdout` and sent to the user in Telegram. `stderr` is now routed exclusively to `logger.debug`, keeping bot output clean for all skills.
+- **Fix — `music` skill output noise**: Redirected all `[music]` diagnostic `print()` calls to `sys.stderr`. Silenced `browser_use` / `BrowserSession` / `cloud` Python loggers at `WARNING` level to suppress `INFO [cloud]` and `INFO [BrowserSession]` lines that were leaking to `stdout`.
+- **Fix — `music` skill CSRF token**: GoTonight (ASP.NET) requires a `__RequestVerificationToken` header on POST requests; without it the server returns `isRequestValid=False` and no events. The AJAX script now reads the token from the page's meta tag or hidden input and passes it as the `RequestVerificationToken` header. Post-jQuery wait extended from 1 s to 3 s to allow full page initialisation before the request fires.
+- **Fix — Main Agent greeting routing**: Added an explicit system prompt rule in `llm.js` so greetings ("good morning", "hello", "hi", "hey") are always handled conversationally; the agent no longer calls `run_skill` for greetings.
+- **Workflow — `/agents`**: Created a new global workflow (`global_workflows/agents.md`) that guides updating `AGENTS.md` architecture sections and appending a dated Change Log entry after each development session.
 
 ### 2026-05-18
 - **Documentation Overhaul & Auditing**: Conducted a comprehensive documentation review, revamping the root `README.md` to accurately reflect the modern agent architecture, prefix routing rules, active sub-agent domains (including Beauty), and the strict distinction between `/data` (records) and `/memory` (memories). Corrected outdated `node-cron` references in `AGENTS.md` to align with the active `cron` package.
