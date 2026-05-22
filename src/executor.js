@@ -88,7 +88,8 @@ function runSkill(skillName, args = []) {
     }, SCRIPT_TIMEOUT_MS);
 
     child.stdout.on('data', (data) => { output += data.toString('utf8'); });
-    child.stderr.on('data', (data) => { output += data.toString('utf8'); });
+    // Log stderr to the agent log only — never send it to the user
+    child.stderr.on('data', (data) => { logger.debug(`[${skillName}] ${data.toString('utf8').trim()}`); });
 
     child.on('close', (exitCode) => {
       clearTimeout(timer);

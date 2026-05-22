@@ -16,6 +16,7 @@ Defaults:
 
 import asyncio
 import json
+import logging
 import os
 import re
 import sys
@@ -24,6 +25,11 @@ from datetime import date as DateClass
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from geopy.geocoders import Nominatim
+
+# Silence browser_use / cloud library INFO noise — only warnings and errors reach stdout
+logging.getLogger('browser_use').setLevel(logging.WARNING)
+logging.getLogger('BrowserSession').setLevel(logging.WARNING)
+logging.getLogger('cloud').setLevel(logging.WARNING)
 
 # ── Environment ────────────────────────────────────────────────────────────────
 env_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
