@@ -17,8 +17,8 @@ function isSkillEnabled(name) {
 function initScheduler(bot) {
   logger.info('Initializing scheduler...');
 
-  // Task: Send "Good morning" every day at 9:00 AM
-  new CronJob('0 9 * * *', async () => {
+  // Task: Send "Good morning" every day at 8:30 AM
+  new CronJob('30 8 * * *', async () => {
     if (!isSkillEnabled('good_morning')) {
       logger.info('[Scheduler] Skipping good_morning: skill is disabled.');
       return;
@@ -85,7 +85,7 @@ function initScheduler(bot) {
     }
   }).start();
 
-  logger.info('Scheduled tasks initialized (9 AM Greeting, Hourly Weekday Dip-Buy, 7:50 PM Weekday Dip-Buy).');
+  logger.info('Scheduled tasks initialized (8:30 AM Greeting, Hourly Weekday Dip-Buy, 7:50 PM Weekday Dip-Buy).');
 }
 
 module.exports = { initScheduler };

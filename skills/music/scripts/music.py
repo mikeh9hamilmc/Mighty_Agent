@@ -155,13 +155,13 @@ async def fetch_events(date_str: str, lat: float, lon: float) -> list[str]:
         for attempt in range(15):  # 15 × 2s = 30s max
             await asyncio.sleep(2)
             check = await page.evaluate("() => typeof window.$ !== 'undefined'")
-            print(f"[music] jQuery check {attempt + 1}/15: {check}", flush=True)
+            print(f"[music] jQuery check {attempt + 1}/15: {check}", flush=True, file=sys.stderr)
             if check.lower() == "true":
                 jquery_ready = True
                 break
 
         if not jquery_ready:
-            print("[music] ERROR: jQuery never became available after 30s.", flush=True)
+            print("[music] ERROR: jQuery never became available after 30s.", flush=True, file=sys.stderr)
             return []
 
         # Dismiss the cookie/promo modal if present
@@ -182,19 +182,19 @@ async def fetch_events(date_str: str, lat: float, lon: float) -> list[str]:
             result = json.loads(raw)
 
             if not result.get("success"):
-                print(f"[music] AJAX error (attempt {attempt + 1}): {result.get('error')}", flush=True)
+                print(f"[music] AJAX error (attempt {attempt + 1}): {result.get('error')}", flush=True, file=sys.stderr)
             else:
                 events = result.get("data", {}).get("data") or []
                 is_valid = result.get("data", {}).get("isRequestValid")
-                print(f"[music] AJAX attempt {attempt + 1}: isRequestValid={is_valid}, events={len(events)}", flush=True)
+                print(f"[music] AJAX attempt {attempt + 1}: isRequestValid={is_valid}, events={len(events)}", flush=True, file=sys.stderr)
                 if events:
                     return events
 
             if attempt < MAX_RETRIES - 1:
-                print(f"[music] Empty result — waiting 5s before retry...", flush=True)
+                print(f"[music] Empty result — waiting 5s before retry...", flush=True, file=sys.stderr)
                 await asyncio.sleep(5)
 
-        print("[music] All AJAX attempts returned empty. No events found.", flush=True)
+        print("[music] All AJAX attempts returned empty. No events found.", flush=True, file=sys.stderr)
         return []
 
     finally:
