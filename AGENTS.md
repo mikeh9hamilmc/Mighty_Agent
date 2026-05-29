@@ -101,6 +101,9 @@ To implement a new specialized sub-agent in the future, please strictly refer to
 
 ## Change Log
 
+### 2026-05-29
+- **Fix — Markdown Table Formatting for Telegram**: Addressed an issue where tables generated in Markdown (`|` syntax) were unreadable in Telegram due to a lack of native rendering support. Updated system prompts across the Main Agent and all specialized sub-agents (`beauty`, `medical`, `legal`, `finance`, `travel`, `coder`) to explicitly forbid the use of Markdown tables and instead enforce structured lists with bold headers and bullet points for all comparative and tabular data.
+
 ### 2026-05-22
 - **Fix — `good_morning` skill**: Corrected broken weather integration. The script was looking for `get_weather.py` (non-existent); fixed to `weather.py`. Replaced subprocess call with a direct Python module import so the structured dict is formatted as Markdown before being sent to Telegram (e.g., temperature, humidity, wind, rain chance).
 - **Fix — `scheduler.js`**: Changed the `good_morning` cron from `0 9 * * *` (9:00 AM) to `30 8 * * *` (8:30 AM).
