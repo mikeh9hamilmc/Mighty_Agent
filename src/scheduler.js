@@ -18,7 +18,7 @@ function initScheduler(bot) {
   logger.info('Initializing scheduler...');
 
   // Task: Send "Good morning" every day at 8:30 AM
-  new CronJob('30 8 * * *', async () => {
+  new CronJob('30 7 * * *', async () => {
     if (!isSkillEnabled('good_morning')) {
       logger.info('[Scheduler] Skipping good_morning: skill is disabled.');
       return;

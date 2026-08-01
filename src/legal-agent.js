@@ -24,6 +24,11 @@ const legalTools = new DocumentManager('legal');
 const logger = require('./logger');
 const cancellation = require('./cancellation');
 
+const model = 'openrouter'; // 'openrouter' or 'modal'
+
+const MODAL_PROXY_TOKEN_ID = 'wk-L0tzRsEmO0lnP3m0FnK92C';
+const MODAL_PROXY_TOKEN_SECRET = 'ws-oepUyzE8uZ6MnF4gdQSQlP';
+
 const LEGAL_MODEL = '@preset/mighty-agent-legal';
 const MAX_ITERATIONS = 30;
 
@@ -348,9 +353,42 @@ function isStatusCommand(msg) {
 // ─── Streaming Agent Loop ────────────────────────────────────────────────────
 
 /**
- * Helper to call OpenRouter API.
+ * Helper to call AI Model (OpenRouter or Modal).
  */
-async function callOpenRouter(messages, tools) {
+async function callAiModel(messages, tools) {
+  if (model === 'modal') {
+    const url = "https://mikeh9hamilmc--ep-kimi-k3-server.us-west.modal.direct/v1/chat/completions";
+    const headers = {
+      "Content-Type": "application/json",
+      "Modal-Key": MODAL_PROXY_TOKEN_ID,
+      "Modal-Secret": MODAL_PROXY_TOKEN_SECRET
+    };
+    const payload = {
+      model: "moonshotai/Kimi-K3",
+      messages: messages,
+      tools: tools,
+      tool_choice: "auto",
+      temperature: 0.3,
+      max_tokens: 2048,
+      top_p: 0.95,
+      stream: false,
+      reasoning_effort: "high"
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Modal API error: ${response.status} ${errorText}`);
+    }
+
+    return await response.json();
+  }
+
   if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not configured in .env');
 
   const url = "https://openrouter.ai/api/v1/chat/completions";
@@ -439,7 +477,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
     const systemMsg = { role: 'system', content: currentSystemPrompt };
     const conversation = [systemMsg, ...messages];
 
-    const data = await callOpenRouter(conversation, TOOLS);
+    const data = await callAiModel(conversation, TOOLS);
     cancellation.check();
     if (!data.choices || data.choices.length === 0) {
       const errorMsg = data.error?.message || 'AI returned an empty response.';
