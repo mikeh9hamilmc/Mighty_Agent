@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const fetch = require('node-fetch');
-const { Telegraf } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const { TELEGRAM_TOKEN, AUTHORIZED_USER_ID } = require('./config');
 const { runSkill } = require('./executor');
 const llm = require('./llm');
@@ -20,6 +20,10 @@ const cancellation = require('./cancellation');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const startTime = Date.now();
+
+// State for pre-selecting target agent for uploads & tracking recent uploads for routing buttons
+let pendingUpload = { agent: null, expires: 0 };
+const recentUploads = new Map();
 
 // Register sender callback so DocumentManager can send files to Telegram
 DocumentManager.setTelegramSender(async (filePath, filename) => {
@@ -128,7 +132,7 @@ bot.command('refresh', async (ctx) => {
 // Registers one /command per enabled skill (skill names use underscores).
 function registerSkillCommands() {
   const subAgents = ['legal', 'medical', 'finance', 'coder', 'travel', 'beauty'];
-  const nativeCommands = ['start', 'list', 'refresh', 'status', 'clear', 'stop', 'get'];
+  const nativeCommands = ['start', 'list', 'refresh', 'status', 'clear', 'stop', 'get', 'upload', 'move'];
   // Register handlers for ALL discovered skills.
   // We check if they are enabled AT RUNTIME.
   for (const skill of llm.ALL_SKILLS) {
@@ -173,6 +177,8 @@ async function syncTelegramCommands() {
     { command: 'refresh', description: 'Reload all agent data and memory' },
     { command: 'status',  description: 'Show bot uptime and system info' },
     { command: 'get',     description: 'Request/download a document from the data folder' },
+    { command: 'upload',  description: 'Pre-select target agent folder for next upload' },
+    { command: 'move',    description: 'Move a document to another agent folder' },
     { command: 'clear',   description: 'Clear the current session context and start fresh' },
     { command: 'stop',    description: 'Stop current thinking/execution' },
   ];
@@ -256,6 +262,59 @@ bot.command('get', async (ctx) => {
     logger.error(`[Bot] /get failed to send document: ${err.message}`);
     await ctx.reply(`❌ Failed to send document: ${err.message}`);
   }
+});
+
+// ─── /upload ────────────────────────────────────────────────────────────────
+bot.command('upload', async (ctx) => {
+  const agentArg = ctx.message.text.trim().split(/\s+/)[1]?.toLowerCase();
+  const knownAgents = ['legal', 'medical', 'finance', 'coder', 'travel', 'beauty', 'main'];
+
+  if (!agentArg || !knownAgents.includes(agentArg)) {
+    return ctx.reply(
+      `ℹ️ *Upload Pre-selection*\n\n` +
+      `To pre-select which folder your next file goes to, type:\n` +
+      `• \`/upload legal\`\n` +
+      `• \`/upload medical\`\n` +
+      `• \`/upload finance\`\n` +
+      `• \`/upload main\`\n\n` +
+      `_Available: ${knownAgents.join(', ')}_`,
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  pendingUpload = {
+    agent: agentArg,
+    expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+  };
+
+  const agentCap = agentArg.charAt(0).toUpperCase() + agentArg.slice(1);
+  await ctx.reply(`🎯 *Target set to ${agentCap}!* Click the paperclip 📎 and upload your file now. It will be stored in \`skills/${agentArg}/data/\`.`, { parse_mode: 'Markdown' });
+});
+
+// ─── /move ──────────────────────────────────────────────────────────────────
+bot.command('move', async (ctx) => {
+  const parts = ctx.message.text.trim().split(/\s+/).slice(1);
+  if (parts.length < 2) {
+    return ctx.reply(
+      `ℹ️ *Move Document*\n\nUsage: \`/move <filename> <target_agent>\`\nExample: \`/move contract.pdf legal\``,
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  const targetAgent = parts[parts.length - 1].toLowerCase();
+  const filename = parts.slice(0, -1).join(' ');
+  const targetManager = getManager(targetAgent);
+
+  if (!targetManager) {
+    return ctx.reply(`❌ Unknown agent "${targetAgent}". Available: legal, medical, finance, coder, travel, beauty, main.`);
+  }
+
+  const result = await llm.mainDocs.moveDocument(filename, targetManager);
+  if (result.error) {
+    return ctx.reply(`❌ ${result.error}`);
+  }
+
+  await ctx.reply(`✅ Moved \`${result.filename}\` to *${targetManager.agentCap}* (\`skills/${targetAgent}/data/\`).`, { parse_mode: 'Markdown' });
 });
 
 // ─── /status ────────────────────────────────────────────────────────────────
@@ -582,6 +641,11 @@ bot.on('document', async (ctx) => {
       promptText = '';
     }
 
+    if (pendingUpload.agent && Date.now() < pendingUpload.expires && targetAgent === 'main' && !caption) {
+      targetAgent = pendingUpload.agent;
+      pendingUpload = { agent: null, expires: 0 };
+    }
+
     const targetManager = getManager(targetAgent) || llm.mainDocs;
     const statusMsg = await ctx.reply(`📥 Receiving \`${rawFileName}\` for *${targetManager.agentCap}* data folder...`, { parse_mode: 'Markdown' });
 
@@ -597,6 +661,10 @@ bot.on('document', async (ctx) => {
     // Save document to agent data directory and index
     const saveResult = await targetManager.saveUploadedDocument(rawFileName, buffer);
 
+    const isExplicit = caption.length > 0 || (targetAgent !== 'main');
+    const uploadId = Date.now().toString(36);
+    recentUploads.set(uploadId, { filename: saveResult.filename, agent: targetManager.agentName });
+
     let confirmation = `✅ *Document Saved*\n` +
       `• File: \`${saveResult.filename}\`\n` +
       `• Target: \`skills/${targetManager.agentName}/data/\`\n` +
@@ -608,7 +676,35 @@ bot.on('document', async (ctx) => {
       confirmation += `• Status: Indexed in document cache\n`;
     }
 
-    await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, confirmation, { parse_mode: 'Markdown' });
+    if (!isExplicit) {
+      confirmation += `\n_Where would you like to store this document?_`;
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        undefined,
+        confirmation,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('⚖️ Legal', `route:${uploadId}:legal`),
+              Markup.button.callback('🩺 Medical', `route:${uploadId}:medical`),
+              Markup.button.callback('💰 Finance', `route:${uploadId}:finance`),
+            ],
+            [
+              Markup.button.callback('✈️ Travel', `route:${uploadId}:travel`),
+              Markup.button.callback('💄 Beauty', `route:${uploadId}:beauty`),
+              Markup.button.callback('🧑‍💻 Coder', `route:${uploadId}:coder`),
+            ],
+            [
+              Markup.button.callback('📁 Keep in Main', `route:${uploadId}:keep`),
+            ]
+          ])
+        }
+      );
+    } else {
+      await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, confirmation, { parse_mode: 'Markdown' });
+    }
 
     // If an instruction was provided in the caption, pass it to the agent
     if (promptText && promptText.length > 0) {
@@ -661,6 +757,51 @@ bot.on('document', async (ctx) => {
   } catch (err) {
     logger.error(`[Bot] Error processing document upload: ${err.message}`);
     await ctx.reply(`❌ Failed to process document: ${err.message}`);
+  }
+});
+
+// ─── Inline Button Callback for Document Routing ─────────────────────────────
+bot.action(/^route:([a-zA-Z0-9]+):([a-zA-Z0-9]+)$/, async (ctx) => {
+  try {
+    const uploadId = ctx.match[1];
+    const targetAgent = ctx.match[2].toLowerCase();
+
+    await ctx.answerCbQuery();
+
+    const uploadInfo = recentUploads.get(uploadId);
+    if (!uploadInfo) {
+      await ctx.editMessageReplyMarkup(undefined).catch(() => { });
+      return ctx.reply('⚠️ Upload session expired. You can still use `/move <filename> <agent>` anytime.', { parse_mode: 'Markdown' });
+    }
+
+    if (targetAgent === 'keep' || targetAgent === uploadInfo.agent) {
+      await ctx.editMessageReplyMarkup(undefined).catch(() => { });
+      return;
+    }
+
+    const targetManager = getManager(targetAgent);
+    if (!targetManager) {
+      return ctx.reply(`❌ Unknown agent "${targetAgent}".`);
+    }
+
+    const sourceManager = getManager(uploadInfo.agent) || llm.mainDocs;
+    const moveResult = await sourceManager.moveDocument(uploadInfo.filename, targetManager);
+
+    if (moveResult.success) {
+      uploadInfo.agent = targetAgent;
+      await ctx.editMessageText(
+        `✅ *Document Stored in ${targetManager.agentCap}*\n` +
+        `• File: \`${uploadInfo.filename}\`\n` +
+        `• Location: \`skills/${targetAgent}/data/\`\n` +
+        `• Indexed in *${targetManager.agentCap}* document cache.`,
+        { parse_mode: 'Markdown' }
+      ).catch(() => { });
+    } else {
+      await ctx.reply(`❌ Could not move document: ${moveResult.error}`);
+    }
+  } catch (err) {
+    logger.error(`[Bot] Error routing document via callback: ${err.message}`);
+    await ctx.reply(`❌ Routing error: ${err.message}`).catch(() => { });
   }
 });
 

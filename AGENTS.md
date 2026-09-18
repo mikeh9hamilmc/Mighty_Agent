@@ -63,7 +63,11 @@ The system is built as a modular Node.js application that bridges the gap betwee
 
 1. When the program is started or refreshed: any new pdf, excel or word documents in all data folders should be converted to .md and included in the data cache.
 2. If user asks about records, documents, or files, the agent that is being talked to should use tools to search its /data cache or .md files to find the information and include them in the reply to the user.
-3. **Telegram Document Ingestion**: Users can upload `.md`, `.pdf`, or Word (`.docx`, `.doc`) documents directly via Telegram. The document is automatically saved to the target agent's `data/` folder (defaulting to `skills/main/data/`, or routing to specialized sub-agent folders like `skills/legal/data/` if indicated in the caption). Uploaded binary files are automatically converted to `.md` and added to the cache. If an accompanying prompt is included in the caption, it is forwarded to the agent for immediate analysis.
+3. **Telegram Document Ingestion & Routing**: Users can upload `.md`, `.pdf`, or Word (`.docx`, `.doc`) documents directly via Telegram:
+   - **Interactive Routing Buttons**: If a file is uploaded without a caption or pre-selection, the bot presents inline buttons (`⚖️ Legal`, `🩺 Medical`, `💰 Finance`, `✈️ Travel`, `💄 Beauty`, `🧑‍💻 Coder`, `📁 Keep in Main`) allowing instant one-tap relocation.
+   - **Pre-selection (`/upload <agent>`)**: Set the target agent before uploading (e.g., `/upload legal`); the next file attached via the paperclip 📎 within 5 minutes goes directly to `skills/<agent>/data/`.
+   - **Document Relocation (`/move <filename> <agent>`)**: Move any uploaded document between agent data directories at any time (e.g., `/move contract.pdf legal`), automatically moving accompanied `.md` conversions and updating both agent document caches.
+   - **Caption Routing**: Prepending `ask <agent>`, `#<agent>`, or simply specifying the agent name in the document caption immediately routes the file and triggers analysis.
 4. **Telegram Document Retrieval**: Users can request documents from the data folder:
    - **Via Agent Tool (`send_document`)**: When asked in natural language (e.g., "Send me the Case Summary pdf"), the Main Agent and all specialized sub-agents locate the file and send it to the user as a file attachment via Telegram.
    - **Via Direct Slash Command (`/get`)**: Users can type `/get` to list available documents, or `/get <filename>` to directly download any document without an LLM round-trip.
@@ -106,12 +110,15 @@ To implement a new specialized sub-agent in the future, please strictly refer to
 ## Change Log
 
 ### 2026-09-18
-- **Feature — Telegram Document Upload and Download System**:
-    - **Document Submission**: Implemented `bot.on('document')` in `src/bot.js` allowing users to submit documents in `.md`, `.pdf`, or Word (`.docx`, `.doc`) formats directly via Telegram. Documents are downloaded from Telegram and stored in `skills/<agent>/data/` (defaulting to `skills/main/data/` or routed to a specific agent like `legal`, `medical`, `finance`, etc., based on caption prefixes).
+- **Feature — Telegram Document Upload, Routing, and Download System**:
+    - **Document Submission & Routing Options**: Implemented `bot.on('document')` in `src/bot.js` allowing users to submit documents in `.md`, `.pdf`, or Word (`.docx`, `.doc`) formats directly via Telegram.
+        - **Interactive Routing Buttons**: Automatically attached inline keyboard buttons (`⚖️ Legal`, `🩺 Medical`, `💰 Finance`, etc.) to files uploaded without a caption so users can relocate files to any sub-agent data directory with a single tap.
+        - **Upload Pre-selection (`/upload <agent>`)**: Added `/upload` command enabling users to pre-designate the destination folder before clicking the paperclip 📎 (5-minute expiration).
+        - **Document Relocation (`/move <filename> <agent>`)**: Added `/move` command and `moveDocument()` in `DocumentManager` to relocate documents between agent data folders while migrating markdown companions and syncing search indexes.
     - **Automatic Markdown Conversion & Caching**: Added `saveUploadedDocument` in `src/document-tools.js` which automatically extracts text from `.pdf`, `.docx`, and `.doc` files into `.md` format and syncs the agent's document cache index.
     - **Document Retrieval Tool (`send_document`)**: Added `send_document` tool schema and handler across `DocumentManager` and all agent loops (`llm.js`, `legal`, `medical`, `finance`, `coder`, `travel`, `beauty`). The agent resolves files (with fallback across agent folders) and transmits them directly to Telegram via `bot.telegram.sendDocument`.
     - **Native `/get` Slash Command**: Added `/get` command in `src/bot.js` enabling instant file listing and downloads without an LLM query. Registered `/get` in `syncTelegramCommands()`.
-    - **Automated Test Suite**: Added `tests/document_exchange.test.js` covering document uploads, markdown extraction, search matching, cross-agent resolution, and telegram transmission.
+    - **Automated Test Suite**: Added `tests/document_exchange.test.js` covering document uploads, markdown extraction, search matching, cross-agent resolution, relocation (`moveDocument`), and telegram transmission.
 
 ### 2026-08-01
 - **Feature — Modal AI Endpoint for `legal-agent`**: Added multi-provider support to `src/legal-agent.js` enabling switching between OpenRouter and Modal hosted LLM endpoints via a top-level `model` constant (`'openrouter'` vs `'modal'`).

@@ -791,6 +791,54 @@ class DocumentManager {
     };
   }
 
+  async moveDocument(filename, targetManager) {
+    const found = this.findDocument(filename);
+    if (!found.found) {
+      return { error: `File "${filename}" not found in any agent data folder.` };
+    }
+
+    if (found.agentName === targetManager.agentName) {
+      return { success: true, filename: found.filename, message: `File "${found.filename}" is already in ${targetManager.agentCap} data folder.` };
+    }
+
+    const sourcePath = found.filePath;
+    const destPath = path.join(targetManager.dataDir, found.filename);
+
+    if (!fs.existsSync(targetManager.dataDir)) {
+      fs.mkdirSync(targetManager.dataDir, { recursive: true });
+    }
+
+    // Move primary file
+    fs.renameSync(sourcePath, destPath);
+
+    // If an accompanying .md exists for binary file, move it as well
+    const baseName = path.parse(found.filename).name;
+    const sourceDir = path.dirname(sourcePath);
+    const sourceMdPath = path.join(sourceDir, baseName + '.md');
+    let mdMoved = false;
+
+    if (path.extname(found.filename).toLowerCase() !== '.md' && fs.existsSync(sourceMdPath)) {
+      const destMdPath = path.join(targetManager.dataDir, baseName + '.md');
+      fs.renameSync(sourceMdPath, destMdPath);
+      mdMoved = true;
+    }
+
+    // Refresh both managers' cache
+    const sourceManager = getManager(found.agentName) || this;
+    await sourceManager.initTools();
+    await targetManager.initTools();
+
+    logger.info(`[DocumentManager] Moved ${found.filename} from ${sourceManager.agentName} to ${targetManager.agentName}`);
+
+    return {
+      success: true,
+      filename: found.filename,
+      fromAgent: sourceManager.agentName,
+      toAgent: targetManager.agentName,
+      mdMoved
+    };
+  }
+
   async toolSaveSessionHistory(input) {
     const session = require('./session');
     const mdContent = session.formatAsMarkdown();

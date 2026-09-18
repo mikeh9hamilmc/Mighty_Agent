@@ -122,4 +122,24 @@ describe('Document Upload & Download Exchange System', () => {
     expect(result.success).toBe(true);
     expect(sentDocuments.length).toBe(1);
   });
+
+  test('moveDocument transfers a file from one agent to another and re-indexes', async () => {
+    // testMdFile currently in mainManager
+    expect(fs.existsSync(path.join(mainManager.dataDir, testMdFile))).toBe(true);
+
+    const moveRes = await mainManager.moveDocument(testMdFile, legalManager);
+    expect(moveRes.success).toBe(true);
+    expect(moveRes.toAgent).toBe('legal');
+
+    // Should no longer exist in main
+    expect(fs.existsSync(path.join(mainManager.dataDir, testMdFile))).toBe(false);
+    // Should exist in legal
+    expect(fs.existsSync(path.join(legalManager.dataDir, testMdFile))).toBe(true);
+
+    // Document index in legal should have it
+    const searchInLegal = legalManager.findDocument(testMdFile);
+    expect(searchInLegal.found).toBe(true);
+    expect(searchInLegal.agentName).toBe('legal');
+  });
 });
+
