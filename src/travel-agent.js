@@ -32,6 +32,7 @@ You have access to the user's travel documents and records. Use these tools to f
 • grep_documents — Search for specific terms, dates, locations, names, or phrases across all documents. THIS IS YOUR FIRST ACTION for any factual question. Supports regex patterns.
 • view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep, or to read an entire short document.
 • list_documents — List all travel files with metadata. Use ONLY when the user explicitly asks "what files do you have" or "list my documents". Do NOT use this as your first step for factual questions.
+• send_document — Send a travel document or file to the user via Telegram when requested.
 • web_search — Search the web for flight prices, hotel options, travel facts, or anything not in local documents. Use kayak.com for prices.
 • create_document — Write research, notes, or itineraries to a .md file in the travel/data/ folder.
 
@@ -96,6 +97,25 @@ const TOOLS = [
           filename: { type: 'string', description: 'Name of the file to read.' },
           start_line: { type: 'integer', description: 'Start line (1-indexed).' },
           end_line: { type: 'integer', description: 'End line (inclusive).' },
+        },
+        required: ['filename'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_document',
+      description:
+        'Send a travel document from the travel/data/ folder directly to the user as a file via Telegram. ' +
+        'Use this whenever the user asks to receive, download, or get a travel file sent to them.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The filename to send (e.g. "Itinerary.md", "Flight_Confirmation.pdf", "Guide.docx"). Supports exact or partial filenames.',
+          },
         },
         required: ['filename'],
       },
@@ -293,7 +313,7 @@ async function runTravelAgent(question, onChunk = () => { }, onStatus = () => { 
       const result = await travelTools.executeTool(name, args);
       cancellation.check();
 
-      if (name === 'view_document' && result.filename) sources.add(result.filename);
+      if ((name === 'view_document' || name === 'send_document') && result.filename) sources.add(result.filename);
       if (name === 'grep_documents' && result.matches) result.matches.forEach(m => sources.add(m.file));
       if (name === 'web_search' && result.results) result.results.forEach(r => sources.add(r.url));
 

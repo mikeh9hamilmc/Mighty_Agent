@@ -1,10 +1,13 @@
 'use strict';
 
+const path = require('path');
+const fs = require('fs');
+const fetch = require('node-fetch');
 const { Telegraf } = require('telegraf');
 const { TELEGRAM_TOKEN, AUTHORIZED_USER_ID } = require('./config');
 const { runSkill } = require('./executor');
 const llm = require('./llm');
-const { refreshAllManagers } = require('./document-tools');
+const { refreshAllManagers, DocumentManager, getManager, getAllManagers } = require('./document-tools');
 const { runCoderAgent } = require('./coder-agent');
 const { runLegalAgent } = require('./legal-agent');
 const { runMedicalAgent } = require('./medical-agent');
@@ -17,6 +20,14 @@ const cancellation = require('./cancellation');
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
 const startTime = Date.now();
+
+// Register sender callback so DocumentManager can send files to Telegram
+DocumentManager.setTelegramSender(async (filePath, filename) => {
+  return await bot.telegram.sendDocument(AUTHORIZED_USER_ID, {
+    source: filePath,
+    filename: filename || path.basename(filePath),
+  });
+});
 
 // ─── API Error Formatter ────────────────────────────────────────────────────
 /**
@@ -69,9 +80,11 @@ bot.start(async (ctx) => {
     `*Commands:*\n` +
     `/list — show available skills\n` +
     `/refresh — reload all agent data and memory\n` +
-    `/status — show uptime info\n\n` +
+    `/status — show uptime info\n` +
+    `/get — download documents from data folder\n` +
+    `/clear — reset session context\n\n` +
     `Each enabled skill also has its own command (see /list).\n\n` +
-    `_Example: "What time is it?"_`,
+    `_Example: "What time is it?" or upload a .pdf/.docx/.md file directly!_`,
     { parse_mode: 'Markdown' }
   );
 });
@@ -115,7 +128,7 @@ bot.command('refresh', async (ctx) => {
 // Registers one /command per enabled skill (skill names use underscores).
 function registerSkillCommands() {
   const subAgents = ['legal', 'medical', 'finance', 'coder', 'travel', 'beauty'];
-  const nativeCommands = ['start', 'list', 'refresh', 'status', 'clear'];
+  const nativeCommands = ['start', 'list', 'refresh', 'status', 'clear', 'stop', 'get'];
   // Register handlers for ALL discovered skills.
   // We check if they are enabled AT RUNTIME.
   for (const skill of llm.ALL_SKILLS) {
@@ -159,6 +172,7 @@ async function syncTelegramCommands() {
     { command: 'list',    description: 'List all available skills' },
     { command: 'refresh', description: 'Reload all agent data and memory' },
     { command: 'status',  description: 'Show bot uptime and system info' },
+    { command: 'get',     description: 'Request/download a document from the data folder' },
     { command: 'clear',   description: 'Clear the current session context and start fresh' },
     { command: 'stop',    description: 'Stop current thinking/execution' },
   ];
@@ -200,6 +214,47 @@ bot.command('stop', async (ctx) => {
     await ctx.reply('🛑 *Interrupting thinking...*', { parse_mode: 'Markdown' });
   } else {
     await ctx.reply('ℹ️ No active thinking session to stop.', { parse_mode: 'Markdown' });
+  }
+});
+
+// ─── /get ───────────────────────────────────────────────────────────────────
+bot.command('get', async (ctx) => {
+  const query = ctx.message.text.trim().split(/\s+/).slice(1).join(' ');
+
+  if (!query) {
+    const allManagers = getAllManagers();
+    const sections = [];
+
+    for (const mgr of allManagers) {
+      if (fs.existsSync(mgr.dataDir)) {
+        const files = fs.readdirSync(mgr.dataDir).filter(f => !f.startsWith('.') && f.toLowerCase() !== 'readme.md');
+        if (files.length > 0) {
+          sections.push(`• *${mgr.agentCap}* (\`${mgr.agentName}/data/\`):\n` + files.map(f => `    - \`${f}\``).join('\n'));
+        }
+      }
+    }
+
+    if (sections.length === 0) {
+      return ctx.reply('📂 No documents found in any agent data folder.');
+    }
+
+    const msg = `📁 *Available Documents:*\n\n${sections.join('\n\n')}\n\n_To download a file, send:_ \`/get <filename>\``;
+    return ctx.reply(msg, { parse_mode: 'Markdown' });
+  }
+
+  const found = llm.mainDocs.findDocument(query);
+  if (!found.found) {
+    return ctx.reply(`❌ Document "${query}" not found in any data folder.\n\nType /get to view all available files.`, { parse_mode: 'Markdown' });
+  }
+
+  try {
+    await ctx.replyWithDocument({
+      source: found.filePath,
+      filename: found.filename
+    });
+  } catch (err) {
+    logger.error(`[Bot] /get failed to send document: ${err.message}`);
+    await ctx.reply(`❌ Failed to send document: ${err.message}`);
   }
 });
 
@@ -488,6 +543,126 @@ async function handleMainAgent(ctx, thinkingMsgId, userMessage, stopTyping) {
     if (stopTyping) stopTyping();
   }
 }
+
+// ─── Document Upload Handler ────────────────────────────────────────────────
+bot.on('document', async (ctx) => {
+  try {
+    const doc = ctx.message.document;
+    if (!doc) return;
+
+    const rawFileName = doc.file_name || 'document';
+    const ext = path.extname(rawFileName).toLowerCase();
+    const allowedExts = new Set(['.md', '.pdf', '.docx', '.doc', '.txt']);
+
+    if (!allowedExts.has(ext)) {
+      return await ctx.reply(
+        `❌ Unsupported file type (*${ext || 'unknown'}*).\nPlease send a document in *.md*, *.pdf*, or Word (*.docx*, *.doc*) format.`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    const caption = (ctx.message.caption || '').trim();
+    logger.info(`Received document from ${ctx.from.id}: ${rawFileName} (${doc.file_size} bytes), caption: "${caption}"`);
+
+    let targetAgent = 'main';
+    let promptText = caption;
+
+    const askMatch = caption.match(/^ask\s+(\w+)[.,;:\s]*(.*)/is);
+    const prefixMatch = caption.match(/^#?(\w+)[.,;:\s]+(.*)/is);
+    const knownAgents = new Set(['legal', 'medical', 'finance', 'coder', 'travel', 'beauty', 'main']);
+
+    if (askMatch && knownAgents.has(askMatch[1].toLowerCase())) {
+      targetAgent = askMatch[1].toLowerCase();
+      promptText = askMatch[2].trim();
+    } else if (prefixMatch && knownAgents.has(prefixMatch[1].toLowerCase())) {
+      targetAgent = prefixMatch[1].toLowerCase();
+      promptText = prefixMatch[2].trim();
+    } else if (knownAgents.has(caption.toLowerCase())) {
+      targetAgent = caption.toLowerCase();
+      promptText = '';
+    }
+
+    const targetManager = getManager(targetAgent) || llm.mainDocs;
+    const statusMsg = await ctx.reply(`📥 Receiving \`${rawFileName}\` for *${targetManager.agentCap}* data folder...`, { parse_mode: 'Markdown' });
+
+    // Download document from Telegram
+    const fileLink = await ctx.telegram.getFileLink(doc.file_id);
+    const res = await fetch(fileLink.href);
+    if (!res.ok) {
+      throw new Error(`Failed to download file from Telegram: ${res.statusText}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Save document to agent data directory and index
+    const saveResult = await targetManager.saveUploadedDocument(rawFileName, buffer);
+
+    let confirmation = `✅ *Document Saved*\n` +
+      `• File: \`${saveResult.filename}\`\n` +
+      `• Target: \`skills/${targetManager.agentName}/data/\`\n` +
+      `• Size: ${(doc.file_size / 1024).toFixed(1)} KB\n`;
+
+    if (saveResult.extractedMd) {
+      confirmation += `• Converted: \`${saveResult.extractedMd}\` (Indexed in document cache)\n`;
+    } else {
+      confirmation += `• Status: Indexed in document cache\n`;
+    }
+
+    await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, confirmation, { parse_mode: 'Markdown' });
+
+    // If an instruction was provided in the caption, pass it to the agent
+    if (promptText && promptText.length > 0) {
+      const fullPrompt = `Regarding the uploaded document "${saveResult.filename}": ${promptText}`;
+      if (targetAgent === 'legal') {
+        const thinking = await ctx.reply('⚖️ Legal is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, fullPrompt, 'legal').catch(err => {
+          logger.error(`[Legal] Document prompt error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+      } else if (targetAgent === 'medical') {
+        const thinking = await ctx.reply('🩺 Medical is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, fullPrompt, 'medical').catch(err => {
+          logger.error(`[Medical] Document prompt error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+      } else if (targetAgent === 'finance') {
+        const thinking = await ctx.reply('💰 Finance is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, fullPrompt, 'finance').catch(err => {
+          logger.error(`[Finance] Document prompt error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+      } else if (targetAgent === 'travel') {
+        const thinking = await ctx.reply('✈️ Travel is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, fullPrompt, 'travel').catch(err => {
+          logger.error(`[Travel] Document prompt error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+      } else if (targetAgent === 'beauty') {
+        const thinking = await ctx.reply('💄 Beauty is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, fullPrompt, 'beauty').catch(err => {
+          logger.error(`[Beauty] Document prompt error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+      } else if (targetAgent === 'coder') {
+        const thinking = await ctx.reply('🧑‍💻 Coder is thinking...');
+        streamAgentResponse(ctx, thinking.message_id, fullPrompt, 'coder').catch(err => {
+          logger.error(`[Coder] Document prompt error: ${err.message}`);
+          ctx.reply(formatApiError(err)).catch(() => { });
+        });
+      } else {
+        const stopTyping = startTyping(ctx);
+        session.resetTimer();
+        const thinking = await ctx.reply('🤔 Thinking...');
+        handleMainAgent(ctx, thinking.message_id, fullPrompt, stopTyping).catch(err => {
+          logger.error(`[Main] Document prompt execution error: ${err.message}`);
+        });
+      }
+    }
+  } catch (err) {
+    logger.error(`[Bot] Error processing document upload: ${err.message}`);
+    await ctx.reply(`❌ Failed to process document: ${err.message}`);
+  }
+});
 
 bot.on('text', async (ctx) => {
   try {

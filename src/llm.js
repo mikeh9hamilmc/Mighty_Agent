@@ -204,6 +204,20 @@ function buildTools() {
         },
       },
     },
+    {
+      type: 'function',
+      function: {
+        name: 'send_document',
+        description: 'Send a document from your data folder directly to the user as a file via Telegram. Use this whenever the user asks to receive, download, or get a file from your data folder.',
+        parameters: {
+          type: 'object',
+          properties: {
+            filename: { type: 'string', description: 'Name of the file to send (e.g. "Research.md", "notes.pdf", "session_log.md"). Supports exact or partial filenames.' },
+          },
+          required: ['filename'],
+        },
+      },
+    },
     // ── Memory tools ────────────────────────────────────────────────────────
     {
       type: 'function',
@@ -349,6 +363,7 @@ async function executeLocalTool(name, args) {
     case 'list_documents': return mainDocs.toolListDocuments();
     case 'grep_documents': return mainDocs.toolGrepDocuments(args);
     case 'view_document': return mainDocs.toolViewDocument(args);
+    case 'send_document': return await mainDocs.toolSendDocument(args);
     case 'create_document': return await mainDocs.toolCreateDocument(args);
     case 'web_search': return await mainDocs.toolWebSearch(args);
     case 'save_memory': return mainDocs.toolSaveMemory(args);
@@ -380,6 +395,7 @@ Workflow:
 • For domain-specific questions (legal/medical/finance/code) — use ask_agent to delegate.
 • For tasks the Python skills handle — use run_skill.
 • Always check your memory when the user references past conversations or preferences.
+• When the user asks to receive, download, or get a document from your data folder sent to them via Telegram, call \`send_document\` with the filename.
 • Telegram does NOT support rendering Markdown tables (using pipes '|' and hyphens '---'). NEVER output markdown tables. If you need to present comparative data or tables, ALWAYS present them as a structured list with bold headers and bullet points (e.g. "**Product A**:\n- Feature: Value..."). A structured list is extremely clean and easy for the user to read on mobile screens.
 
 MEMORY RULES (CRITICAL — never break these):
@@ -467,7 +483,7 @@ async function decideAction(userMessage, onStatus = () => { }, history = []) {
           
           if (name === 'web_search') sources.add('Web Search');
           if (name === 'read_memory' || name === 'list_memories') sources.add('Memory Tool');
-          if (name === 'view_document' || name === 'grep_documents' || name === 'list_documents') sources.add('Data File');
+          if (name === 'view_document' || name === 'grep_documents' || name === 'list_documents' || name === 'send_document') sources.add('Data File');
 
           // ── Routing tools: return immediately without adding tool result ──
           if (name === 'run_skill') {

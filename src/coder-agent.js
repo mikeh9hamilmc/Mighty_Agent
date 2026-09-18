@@ -60,6 +60,7 @@ You have access to the user's codebase, documents, and memory.
 • list_documents — See all files in the coder/data/ folder.
 • grep_documents — Search for specific terms across all documents.
 • view_document — Read a specific file or line range.
+• send_document — Send a document or file to the user via Telegram when requested.
 • web_search — Search the web for APIs, docs, or code examples.
 • list_skills — List all available skills in the skills/ directory.
 • read_skill_file — Read the content of any file within a skill (e.g. "dip_buy/SKILL.md").
@@ -119,6 +120,25 @@ const TOOLS = [
           filename: { type: 'string', description: 'Name of the file to read.' },
           start_line: { type: 'integer', description: 'Start line (1-indexed).' },
           end_line: { type: 'integer', description: 'End line (inclusive).' },
+        },
+        required: ['filename'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_document',
+      description:
+        'Send a document from the coder/data/ folder directly to the user as a file via Telegram. ' +
+        'Use this whenever the user asks to receive, download, or get a coder file sent to them.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The filename to send (e.g. "script.py", "notes.md", "architecture.docx"). Supports exact or partial filenames.',
+          },
         },
         required: ['filename'],
       },
@@ -427,7 +447,7 @@ async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, 
       }
       cancellation.check();
 
-      if (name === 'view_document' && result.filename) sources.add(result.filename);
+      if ((name === 'view_document' || name === 'send_document') && result.filename) sources.add(result.filename);
       if (name === 'grep_documents' && result.matches) result.matches.forEach(m => sources.add(m.file));
       if (name === 'web_search' && result.results) result.results.forEach(r => sources.add(r.url));
 

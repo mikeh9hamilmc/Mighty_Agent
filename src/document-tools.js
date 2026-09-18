@@ -677,6 +677,120 @@ class DocumentManager {
     return memoryStr.trim() || null;
   }
 
+  findDocument(queryName) {
+    if (!queryName || typeof queryName !== 'string') return { found: false };
+    const q = queryName.trim().toLowerCase();
+
+    // 1. Check own data directory directly
+    if (fs.existsSync(this.dataDir)) {
+      const files = fs.readdirSync(this.dataDir).filter(f => !f.startsWith('.') && !EXCLUDED_FILES.has(f.toLowerCase()));
+      // Exact match
+      const exact = files.find(f => f.toLowerCase() === q);
+      if (exact) {
+        return { found: true, filename: exact, filePath: path.join(this.dataDir, exact), agentName: this.agentName };
+      }
+      // Exact name without extension matching (e.g. query "Case Summary" matches "Case Summary.pdf")
+      const nameMatch = files.find(f => path.parse(f).name.toLowerCase() === q);
+      if (nameMatch) {
+        return { found: true, filename: nameMatch, filePath: path.join(this.dataDir, nameMatch), agentName: this.agentName };
+      }
+      // Substring match
+      const partial = files.find(f => f.toLowerCase().includes(q));
+      if (partial) {
+        return { found: true, filename: partial, filePath: path.join(this.dataDir, partial), agentName: this.agentName };
+      }
+    }
+
+    // 2. Fallback: Search across other managers
+    for (const other of instances) {
+      if (other === this) continue;
+      if (fs.existsSync(other.dataDir)) {
+        const files = fs.readdirSync(other.dataDir).filter(f => !f.startsWith('.') && !EXCLUDED_FILES.has(f.toLowerCase()));
+        const match = files.find(f => f.toLowerCase() === q || path.parse(f).name.toLowerCase() === q || f.toLowerCase().includes(q));
+        if (match) {
+          return { found: true, filename: match, filePath: path.join(other.dataDir, match), agentName: other.agentName };
+        }
+      }
+    }
+
+    return { found: false };
+  }
+
+  async toolSendDocument({ filename }) {
+    if (!filename || typeof filename !== 'string') {
+      return { error: 'Filename must be provided.' };
+    }
+    const found = this.findDocument(filename.trim());
+    if (!found.found) {
+      const allDocs = this.toolListDocuments().files || [];
+      const fileNames = allDocs.map(f => f.filename);
+      return {
+        error: `File "${filename}" not found in ${this.agentName} data folder or other agent records. Available files: ${fileNames.length ? fileNames.join(', ') : 'none'}`
+      };
+    }
+
+    if (!_telegramSender) {
+      return { error: 'Telegram file transmission is not configured on this agent.' };
+    }
+
+    try {
+      logger.info(`[${this.agentCap} Tools] Sending document to Telegram: ${found.filename} (${found.filePath})`);
+      await _telegramSender(found.filePath, found.filename);
+      return {
+        success: true,
+        filename: found.filename,
+        agent: found.agentName,
+        message: `✅ Sent document "${found.filename}" to the user via Telegram.`
+      };
+    } catch (err) {
+      logger.error(`[${this.agentCap} Tools] Failed to send document: ${err.message}`);
+      return { error: `Failed to send document via Telegram: ${err.message}` };
+    }
+  }
+
+  async saveUploadedDocument(filename, buffer) {
+    const baseName = path.basename(filename).replace(/[/\\]/g, '').replace(/\.\.+/g, '.');
+    if (!baseName) throw new Error('Invalid filename.');
+
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
+    }
+
+    const destPath = path.join(this.dataDir, baseName);
+    fs.writeFileSync(destPath, buffer);
+    logger.info(`[${this.agentCap} Tools] Saved uploaded file: ${destPath} (${buffer.length} bytes)`);
+
+    const ext = path.extname(baseName).toLowerCase();
+    let extractedMd = null;
+
+    // Auto-convert binary files (.pdf, .docx, .doc, .xlsx, .xls) to markdown
+    if (SUPPORTED_EXTS.has(ext) && ext !== '.txt' && ext !== '.md') {
+      const mdName = path.parse(baseName).name + '.md';
+      const mdPath = path.join(this.dataDir, mdName);
+      try {
+        logger.info(`[${this.agentCap} Tools] Converting uploaded binary to MD: ${baseName}`);
+        const text = await extractText(destPath);
+        if (text && text.trim().length > 0) {
+          fs.writeFileSync(mdPath, text, 'utf-8');
+          extractedMd = mdName;
+          logger.info(`[${this.agentCap} Tools] Saved converted file: ${mdName}`);
+        }
+      } catch (err) {
+        logger.error(`[${this.agentCap} Tools] Failed to auto-extract uploaded file ${baseName}: ${err.message}`);
+      }
+    }
+
+    // Refresh index and cache
+    await this.initTools();
+
+    return {
+      filename: baseName,
+      filePath: destPath,
+      extractedMd,
+      fileSize: buffer.length
+    };
+  }
+
   async toolSaveSessionHistory(input) {
     const session = require('./session');
     const mdContent = session.formatAsMarkdown();
@@ -688,6 +802,7 @@ class DocumentManager {
       case 'list_documents': return this.toolListDocuments();
       case 'grep_documents': return this.toolGrepDocuments(input);
       case 'view_document': return this.toolViewDocument(input);
+      case 'send_document': return await this.toolSendDocument(input);
       case 'web_search': return await this.toolWebSearch(input);
       case 'create_document': return await this.toolCreateDocument(input);
       case 'edit_document': return this.toolEditDocument(input);
@@ -710,6 +825,24 @@ class DocumentManager {
   }
 }
 
+let _telegramSender = null;
+DocumentManager.setTelegramSender = function(fn) {
+  _telegramSender = fn;
+};
+
+function getManager(agentName) {
+  if (!agentName) return null;
+  const target = agentName.toLowerCase().trim();
+  for (const manager of instances) {
+    if (manager.agentName.toLowerCase() === target) return manager;
+  }
+  return null;
+}
+
+function getAllManagers() {
+  return [...instances];
+}
+
 async function refreshAllManagers() {
   // Invalidate and reload the global main memory cache first
   _globalMemoryCache.content = null;
@@ -730,4 +863,4 @@ async function refreshAllManagers() {
   return results.join('\n');
 }
 
-module.exports = { DocumentManager, refreshAllManagers };
+module.exports = { DocumentManager, refreshAllManagers, getManager, getAllManagers };

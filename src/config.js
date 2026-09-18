@@ -42,4 +42,6 @@ module.exports = {
   SCRIPT_TIMEOUT_MS:  parseInt(process.env.SCRIPT_TIMEOUT_SEC || '60', 10) * 1000,
   SKILLS_DIR,
   BRAVE_API_KEY: optional('BRAVE_API_KEY'), // Used by all agents via DocumentManager.toolWebSearch
+  MODAL_PROXY_TOKEN_ID: optional('MODAL_PROXY_TOKEN_ID'),
+  MODAL_PROXY_TOKEN_SECRET: optional('MODAL_PROXY_TOKEN_SECRET'),
 };

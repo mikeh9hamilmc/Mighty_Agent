@@ -33,6 +33,7 @@ You have access to the user's medical records and documents. Use these tools to 
 • grep_documents — Search for specific terms, dates, lab results, names, or phrases across all documents. THIS IS YOUR FIRST ACTION for any factual question. Supports regex patterns.
 • view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep, or to read an entire short document.
 • list_documents — List all medical files with metadata. Use ONLY when the user explicitly asks "what files do you have" or "list my documents". Do NOT use this as your first step for factual questions.
+• send_document — Send a medical document or file to the user via Telegram when requested.
 • web_search — Search the web for medical conditions, studies, drug interactions, or treatments. Use when the user's documents don't contain the answer.
 • create_document — Write research, notes, or information to a .md file in the medical/data/ folder.
 
@@ -133,6 +134,25 @@ const TOOLS = [
           end_line: {
             type: 'integer',
             description: 'End line number (1-indexed). Optional.',
+          },
+        },
+        required: ['filename'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_document',
+      description:
+        'Send a medical document from the medical/data/ folder directly to the user as a file via Telegram. ' +
+        'Use this whenever the user asks to receive, download, or get a medical file sent to them.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The filename to send (e.g. "Complete_Blood_Count_2025.pdf", "Doctor_Notes.docx", "Lab_Summary.md"). Supports exact or partial filenames.',
           },
         },
         required: ['filename'],
@@ -450,7 +470,7 @@ async function runMedicalAgent(question, onChunk = () => { }, onStatus = () => {
       cancellation.check();
 
       // Track sources from document tools
-      if (name === 'view_document' && result.filename) {
+      if ((name === 'view_document' || name === 'send_document') && result.filename) {
         sources.add(result.filename);
       }
       if (name === 'grep_documents' && result.matches) {

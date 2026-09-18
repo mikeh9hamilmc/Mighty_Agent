@@ -18,16 +18,13 @@
  */
 
 const fetch = require('node-fetch');
-const { OPENROUTER_API_KEY } = require('./config');
+const { OPENROUTER_API_KEY, MODAL_PROXY_TOKEN_ID, MODAL_PROXY_TOKEN_SECRET } = require('./config');
 const { DocumentManager } = require('./document-tools');
 const legalTools = new DocumentManager('legal');
 const logger = require('./logger');
 const cancellation = require('./cancellation');
 
 const model = 'openrouter'; // 'openrouter' or 'modal'
-
-const MODAL_PROXY_TOKEN_ID = 'wk-L0tzRsEmO0lnP3m0FnK92C';
-const MODAL_PROXY_TOKEN_SECRET = 'ws-oepUyzE8uZ6MnF4gdQSQlP';
 
 const LEGAL_MODEL = '@preset/mighty-agent-legal';
 const MAX_ITERATIONS = 30;
@@ -57,6 +54,7 @@ You have access to the client's case documents. Use these tools to find and cite
 • grep_documents — Search for specific terms, dates, dollar amounts, names, or phrases across all documents. THIS IS YOUR FIRST ACTION for any factual question. Supports regex patterns.
 • view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep, or to read an entire short document.
 • list_documents — List all case files with metadata. Use ONLY when the user explicitly asks "what files do you have" or "list my documents". Do NOT use this as your first step for factual questions.
+• send_document — Send a case document or file to the user via Telegram when requested.
 • web_search — Search the web for statutes, case law, court rules, or legal news. Use when the client's documents don't contain the answer.
 • create_document — Write research, notes, or information to a .md file in the legal/data/ folder.
 
@@ -159,6 +157,25 @@ const TOOLS = [
           end_line: {
             type: 'integer',
             description: 'End line number (1-indexed). Optional.',
+          },
+        },
+        required: ['filename'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_document',
+      description:
+        'Send a case document from the legal/data/ folder directly to the user as a file via Telegram. ' +
+        'Use this whenever the user asks to receive, download, or get a case file sent to them.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The filename to send (e.g. "Case_Summary_1-7.pdf", "Motion_Declaratory_Judgment.docx", "Affidavit.md"). Supports exact or partial filenames.',
           },
         },
         required: ['filename'],
@@ -516,7 +533,7 @@ async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }
       cancellation.check();
 
       // Track sources from document tools
-      if (name === 'view_document' && result.filename) {
+      if ((name === 'view_document' || name === 'send_document') && result.filename) {
         sources.add(result.filename);
       }
       if (name === 'grep_documents' && result.matches) {

@@ -63,6 +63,10 @@ The system is built as a modular Node.js application that bridges the gap betwee
 
 1. When the program is started or refreshed: any new pdf, excel or word documents in all data folders should be converted to .md and included in the data cache.
 2. If user asks about records, documents, or files, the agent that is being talked to should use tools to search its /data cache or .md files to find the information and include them in the reply to the user.
+3. **Telegram Document Ingestion**: Users can upload `.md`, `.pdf`, or Word (`.docx`, `.doc`) documents directly via Telegram. The document is automatically saved to the target agent's `data/` folder (defaulting to `skills/main/data/`, or routing to specialized sub-agent folders like `skills/legal/data/` if indicated in the caption). Uploaded binary files are automatically converted to `.md` and added to the cache. If an accompanying prompt is included in the caption, it is forwarded to the agent for immediate analysis.
+4. **Telegram Document Retrieval**: Users can request documents from the data folder:
+   - **Via Agent Tool (`send_document`)**: When asked in natural language (e.g., "Send me the Case Summary pdf"), the Main Agent and all specialized sub-agents locate the file and send it to the user as a file attachment via Telegram.
+   - **Via Direct Slash Command (`/get`)**: Users can type `/get` to list available documents, or `/get <filename>` to directly download any document without an LLM round-trip.
 
 ### Proactive Interactions
 The agent can also initiate contact via the **Scheduler**. It is configured to send a "Good morning" message every day at **8:30 AM** (cron `30 8 * * *`), which runs the `good_morning` skill (greeting + live weather report). Weekday hourly and 7:50 PM runs of the `dip_buy` skill are also scheduled.
@@ -100,6 +104,19 @@ Specialized sub-agents (like legal, medical, finance, travel, beauty, coder) use
 To implement a new specialized sub-agent in the future, please strictly refer to the step-by-step instructions, code requirements, and templates documented in [sub-agent-template.md](file:///d:/Documents/Indotraq/Software/Ramin/Mighty_Agent/sub-agent-template.md).
 
 ## Change Log
+
+### 2026-09-18
+- **Feature — Telegram Document Upload and Download System**:
+    - **Document Submission**: Implemented `bot.on('document')` in `src/bot.js` allowing users to submit documents in `.md`, `.pdf`, or Word (`.docx`, `.doc`) formats directly via Telegram. Documents are downloaded from Telegram and stored in `skills/<agent>/data/` (defaulting to `skills/main/data/` or routed to a specific agent like `legal`, `medical`, `finance`, etc., based on caption prefixes).
+    - **Automatic Markdown Conversion & Caching**: Added `saveUploadedDocument` in `src/document-tools.js` which automatically extracts text from `.pdf`, `.docx`, and `.doc` files into `.md` format and syncs the agent's document cache index.
+    - **Document Retrieval Tool (`send_document`)**: Added `send_document` tool schema and handler across `DocumentManager` and all agent loops (`llm.js`, `legal`, `medical`, `finance`, `coder`, `travel`, `beauty`). The agent resolves files (with fallback across agent folders) and transmits them directly to Telegram via `bot.telegram.sendDocument`.
+    - **Native `/get` Slash Command**: Added `/get` command in `src/bot.js` enabling instant file listing and downloads without an LLM query. Registered `/get` in `syncTelegramCommands()`.
+    - **Automated Test Suite**: Added `tests/document_exchange.test.js` covering document uploads, markdown extraction, search matching, cross-agent resolution, and telegram transmission.
+
+### 2026-08-01
+- **Feature — Modal AI Endpoint for `legal-agent`**: Added multi-provider support to `src/legal-agent.js` enabling switching between OpenRouter and Modal hosted LLM endpoints via a top-level `model` constant (`'openrouter'` vs `'modal'`).
+    - Configured the Modal API client targeting `https://mikeh9hamilmc--ep-kimi-k3-server.us-west.modal.direct/v1/chat/completions` using model `moonshotai/Kimi-K3` with `reasoning_effort: "high"`.
+    - Added environment variable support for `MODAL_PROXY_TOKEN_ID` and `MODAL_PROXY_TOKEN_SECRET` across `.env`, `.env.example`, and `src/config.js`.
 
 ### 2026-05-29
 - **Fix — Markdown Table Formatting for Telegram**: Addressed an issue where tables generated in Markdown (`|` syntax) were unreadable in Telegram due to a lack of native rendering support. Updated system prompts across the Main Agent and all specialized sub-agents (`beauty`, `medical`, `legal`, `finance`, `travel`, `coder`) to explicitly forbid the use of Markdown tables and instead enforce structured lists with bold headers and bullet points for all comparative and tabular data.

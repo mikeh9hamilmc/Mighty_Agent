@@ -41,6 +41,7 @@ You have access to the user's financial documents and records. Use these tools t
 • grep_documents — Search for specific terms, dates, dollar amounts, names, or phrases across all documents. THIS IS YOUR FIRST ACTION for any factual question. Supports regex patterns.
 • view_document — Read a specific file or line range. Use this to read surrounding context after finding a match with grep, or to read an entire short document.
 • list_documents — List all financial files with metadata. Use ONLY when the user explicitly asks "what files do you have" or "list my documents". Do NOT use this as your first step for factual questions.
+• send_document — Send a financial document or file to the user via Telegram when requested.
 • web_search — Search the web for market data, tax laws, court rules, or real estate trends. Use when the user's documents don't contain the answer.
 • create_document — Write research, notes, or information to a .md file in the finance/data/ folder.
 
@@ -103,6 +104,25 @@ const TOOLS = [
           filename: { type: 'string', description: 'Name of the file to read.' },
           start_line: { type: 'integer', description: 'Start line (1-indexed).' },
           end_line: { type: 'integer', description: 'End line (inclusive).' },
+        },
+        required: ['filename'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_document',
+      description:
+        'Send a financial document from the finance/data/ folder directly to the user as a file via Telegram. ' +
+        'Use this whenever the user asks to receive, download, or get a financial file sent to them.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: 'The filename to send (e.g. "Tax_Return_2024.pdf", "Portfolio_Summary.docx", "Budget.md"). Supports exact or partial filenames.',
+          },
         },
         required: ['filename'],
       },
@@ -312,7 +332,7 @@ async function runFinanceAgent(question, onChunk = () => { }, onStatus = () => {
       const result = await financeTools.executeTool(name, args);
       cancellation.check();
 
-      if (name === 'view_document' && result.filename) sources.add(result.filename);
+      if ((name === 'view_document' || name === 'send_document') && result.filename) sources.add(result.filename);
       if (name === 'grep_documents' && result.matches) result.matches.forEach(m => sources.add(m.file));
       if (name === 'web_search' && result.results) result.results.forEach(r => sources.add(r.url));
 
