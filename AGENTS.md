@@ -78,6 +78,24 @@ The agent can also initiate contact via the **Scheduler**. It is configured to s
 > [!NOTE]
 > **Telegram UI Sync**: Telegram aggressively caches the bot's command menu on the client side. If you add a new skill or perform a `/refresh` and don't see the updated commands when typing `/`, you may need to completely close and restart your Telegram app (Desktop or Mobile) to force it to fetch the new menu.
 
+## Remote Deployment & Updates
+
+The standard procedure to update the remote agent without overwriting data or memory files:
+
+1. **Pull latest code:**
+   ```bash
+   git pull origin master
+   ```
+2. **Restart the agent service:**
+   ```bash
+   sudo systemctl restart mighty-agent
+   ```
+3. **Restart Telegram app:**
+   Completely quit and reopen your Telegram app (Desktop or Mobile) to force client cache clearing and refresh slash command menus and inline buttons.
+
+> [!TIP]
+> Agent `data/` and `memory/` folders are ignored by git in `.gitignore`, so running `git pull origin master` will never overwrite or erase your stored documents or persistent memories.
+
 ## Security & Safety
 
 -   **User Locking**: Only one specific Telegram account can control the agent.
