@@ -72,7 +72,22 @@ class SessionManager {
     
     for (const msg of this.history) {
       const roleName = msg.role === 'user' ? '**User**' : '**Agent**';
-      md += `${roleName}:\n${msg.content}\n\n---\n\n`;
+      let textContent = '';
+      if (typeof msg.content === 'string') {
+        textContent = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        textContent = msg.content
+          .map(part => {
+            if (part.type === 'text') return part.text;
+            if (part.type === 'image_url') return '[Image attached for reference]';
+            return '';
+          })
+          .filter(Boolean)
+          .join('\n');
+      } else if (msg.content && typeof msg.content === 'object') {
+        textContent = JSON.stringify(msg.content);
+      }
+      md += `${roleName}:\n${textContent}\n\n---\n\n`;
     }
 
     return md;

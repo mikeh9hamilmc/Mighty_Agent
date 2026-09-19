@@ -53,6 +53,7 @@ The system is built as a modular Node.js application that bridges the gap betwee
 3. During the session, the entire conversation history is sent to the LLM with each message. 
 4. User may ask to remember key facts for this conversation and then write them to the agents memory folder.
 5. User may ask to create a new file to store the entire conversation history for the active session. This file will be stored in the agents /data folder with .md extension.
+6. User may upload images in `.png` or `.jpg` / `.jpeg` format for conversational reference. Images are converted to base64 Data URLs and retained in the active session context for the duration of the session. They are NOT stored in `memory` or `data` folders, and users are not presented with storage or routing buttons. The Main Agent and all specialized sub-agents can analyze and answer questions about the image.
 
 ### Memory
 
@@ -126,6 +127,15 @@ Specialized sub-agents (like legal, medical, finance, travel, beauty, coder) use
 To implement a new specialized sub-agent in the future, please strictly refer to the step-by-step instructions, code requirements, and templates documented in [sub-agent-template.md](file:///d:/Documents/Indotraq/Software/Ramin/Mighty_Agent/sub-agent-template.md).
 
 ## Change Log
+
+### 2026-09-19
+- **Feature — Conversational Image Reference Support (.png, .jpg)**:
+    - **In-Memory Image Upload Processing**: Added `bot.on('photo')` and updated `bot.on('document')` in `src/bot.js` to handle images in `.png`, `.jpg`, and `.jpeg` formats. Downloaded image buffers are converted to base64 Data URLs and stored strictly in the active conversational session.
+    - **No Disk Storage or Routing Buttons**: In accordance with reference-only usage, images are never stored in `data` or `memory` folders, and users are not prompted with inline destination buttons.
+    - **Immediate & Follow-up Q&A**: Images can be sent with a caption for immediate agent analysis (supporting prefix routing e.g., `ask medical: ...`), or without a caption to establish visual context for subsequent questions.
+    - **Multimodal Sub-Agent Propagation**: Updated `handleMainAgent` and `streamAgentResponse` to seamlessly forward multimodal user turns to sub-agents. Added `extractText` across all sub-agents (`legal`, `medical`, `finance`, `beauty`, `travel`, `coder`) to ensure safe command matching and logging.
+    - **Session Markdown Formatting**: Updated `formatAsMarkdown()` in `src/session.js` to cleanly render multimodal content without `[object Object]` artifacts.
+    - **Automated Test Suite**: Added `tests/image_reference.test.js` validating multimodal session persistence, markdown formatting, absence of file persistence in data/memory, and multi-turn context preservation.
 
 ### 2026-09-18
 - **Feature — Telegram Document Upload, Routing, and Download System**:

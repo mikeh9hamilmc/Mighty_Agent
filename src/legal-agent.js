@@ -355,16 +355,27 @@ const TOOLS = [
 
 // ─── Special Commands ─────────────────────────────────────────────────────────
 
+function extractText(msg) {
+  if (typeof msg === 'string') return msg;
+  if (Array.isArray(msg)) {
+    const textPart = msg.find(p => p.type === 'text');
+    return textPart ? textPart.text : '';
+  }
+  return '';
+}
+
 /** True if the message is requesting a document cache rebuild. */
 function isReadCommand(msg) {
-  return /\b(read|index|load|reload|scan|cache|refresh)\b.*\bdoc/i.test(msg) ||
-    /\bdoc.*\b(read|index|load|reload|scan|cache|refresh)\b/i.test(msg);
+  const str = extractText(msg);
+  return /\b(read|index|load|reload|scan|cache|refresh)\b.*\bdoc/i.test(str) ||
+    /\bdoc.*\b(read|index|load|reload|scan|cache|refresh)\b/i.test(str);
 }
 
 /** True if the user is asking for document status. */
 function isStatusCommand(msg) {
-  return /\b(status|what.*loaded|documents.*loaded|index.*status|what files)\b/i.test(msg) ||
-    /\bhow many\s+(documents|docs|files)\b/i.test(msg);
+  const str = extractText(msg);
+  return /\b(status|what.*loaded|documents.*loaded|index.*status|what files)\b/i.test(str) ||
+    /\bhow many\s+(documents|docs|files)\b/i.test(str);
 }
 
 // ─── Streaming Agent Loop ────────────────────────────────────────────────────
@@ -446,7 +457,7 @@ const session = require('./session');
  * @returns {Promise<{ answer: string, sources: string[] }>}
  */
 async function runLegalAgent(question, onChunk = () => { }, onStatus = () => { }, history = []) {
-  logger.info(`[Legal] Question: ${question}`);
+  logger.info(`[Legal] Question: ${extractText(question)}`);
 
   // ── Special commands ──────────────────────────────────────────────────────
 

@@ -360,15 +360,24 @@ async function callOpenRouter(messages, tools) {
   return await response.json();
 }
 
+function extractText(msg) {
+  if (typeof msg === 'string') return msg;
+  if (Array.isArray(msg)) {
+    const textPart = msg.find(p => p.type === 'text');
+    return textPart ? textPart.text : '';
+  }
+  return '';
+}
+
 function isReadCommand(text) {
-  const lower = text.toLowerCase();
+  const lower = extractText(text).toLowerCase();
   return lower.includes('read document') || lower.includes('read the document') || lower.includes('index document');
 }
 
 // ─── Main Agent Loop ──────────────────────────────────────────────────────────
 
 async function runCoderAgent(question, onChunk = () => {}, onStatus = () => {}, history = []) {
-  logger.info('[Coder] Starting task: ' + question);
+  logger.info('[Coder] Starting task: ' + extractText(question));
 
   if (isReadCommand(question)) {
     onChunk('📂 Scanning and caching documents...\n');

@@ -336,7 +336,7 @@ bot.command('status', async (ctx) => {
  * Stream an Agent response back to Telegram.
  * Edits the initial "thinking" message with accumulating text every 800ms.
  */
-async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
+async function streamAgentResponse(ctx, thinkingMsgId, question, agentName, userMessageAlreadyAdded = false) {
   let accumulated = '';
   let currentStatus = '';
   let lastEdit = Date.now();
@@ -403,7 +403,9 @@ async function streamAgentResponse(ctx, thinkingMsgId, question, agentName) {
     
     // Add interaction to session history
     if (accumulated.length > 0) {
-      session.addMessage('user', question);
+      if (!userMessageAlreadyAdded) {
+        session.addMessage('user', question);
+      }
       session.addMessage('assistant', accumulated);
     }
   } catch (err) {
@@ -516,61 +518,67 @@ async function handleMainAgent(ctx, thinkingMsgId, userMessage, stopTyping) {
 
     // type === 'coder' — delegate to Coder sub-agent
     if (decision.type === 'coder') {
+      session.addMessage('user', userMessage);
       await ctx.telegram.editMessageText(
         ctx.chat.id, thinkingMsgId, undefined,
         '🧑‍💻 Coder is thinking...'
       );
-      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'coder');
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'coder', true);
       return;
     }
 
     // type === 'legal' — delegate to Legal sub-agent
     if (decision.type === 'legal') {
+      session.addMessage('user', userMessage);
       await ctx.telegram.editMessageText(
         ctx.chat.id, thinkingMsgId, undefined,
         '⚖️ Legal is thinking...'
       );
-      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'legal');
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'legal', true);
       return;
     }
 
     // type === 'medical' — delegate to Medical sub-agent
     if (decision.type === 'medical') {
+      session.addMessage('user', userMessage);
       await ctx.telegram.editMessageText(
         ctx.chat.id, thinkingMsgId, undefined,
         '🩺 Medical is thinking...'
       );
-      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'medical');
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'medical', true);
       return;
     }
 
     // type === 'finance' — delegate to Finance sub-agent
     if (decision.type === 'finance') {
+      session.addMessage('user', userMessage);
       await ctx.telegram.editMessageText(
         ctx.chat.id, thinkingMsgId, undefined,
         '💰 Finance is thinking...'
       );
-      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'finance');
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'finance', true);
       return;
     }
 
     // type === 'travel' — delegate to Travel sub-agent
     if (decision.type === 'travel') {
+      session.addMessage('user', userMessage);
       await ctx.telegram.editMessageText(
         ctx.chat.id, thinkingMsgId, undefined,
         '✈️ Travel is thinking...'
       );
-      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'travel');
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'travel', true);
       return;
     }
 
     // type === 'beauty' — delegate to Beauty sub-agent
     if (decision.type === 'beauty') {
+      session.addMessage('user', userMessage);
       await ctx.telegram.editMessageText(
         ctx.chat.id, thinkingMsgId, undefined,
         '💄 Beauty is thinking...'
       );
-      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'beauty');
+      await streamAgentResponse(ctx, thinkingMsgId, decision.task, 'beauty', true);
       return;
     }
 
@@ -603,6 +611,127 @@ async function handleMainAgent(ctx, thinkingMsgId, userMessage, stopTyping) {
   }
 }
 
+// ─── Conversational Image Upload Handler ────────────────────────────────────
+/**
+ * Processes an uploaded image (.png, .jpg, .jpeg) for in-conversation reference.
+ * Does NOT save to data or memory folders, and does NOT present routing buttons.
+ */
+async function processImageUpload(ctx, fileId, caption, mimeType = 'image/jpeg', rawFileName = 'image') {
+  try {
+    const statusMsg = await ctx.reply('📸 Processing image...', { parse_mode: 'Markdown' });
+
+    // Download image from Telegram
+    const fileLink = await ctx.telegram.getFileLink(fileId);
+    const res = await fetch(fileLink.href);
+    if (!res.ok) {
+      throw new Error(`Failed to download image from Telegram: ${res.statusText}`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Limit image size to 10MB to avoid payload issues
+    if (buffer.length > 10 * 1024 * 1024) {
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        undefined,
+        '⚠️ Image is too large (maximum 10MB for conversation reference). Please compress or resize it.'
+      );
+      return;
+    }
+
+    const base64Data = buffer.toString('base64');
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+    const trimmedCaption = (caption || '').trim();
+
+    // Case 1: No caption provided - store as reference in active session and prompt user
+    if (!trimmedCaption) {
+      session.addMessage('user', [
+        { type: 'text', text: 'I uploaded an image for reference.' },
+        { type: 'image_url', image_url: { url: dataUrl } }
+      ]);
+      session.addMessage('assistant', '📸 Image received! What would you like to know about this image?');
+
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        undefined,
+        '📸 *Image received!*\n\nWhat would you like to know about this image?',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Case 2: Caption provided - route to target sub-agent or main agent
+    let targetAgent = null;
+    let promptText = trimmedCaption;
+
+    const askMatch = trimmedCaption.match(/^ask\s+(\w+)[.,;:\s]*(.*)/is);
+    const prefixMatch = trimmedCaption.match(/^#?(\w+)[.,;:\s]+(.*)/is);
+    const knownAgents = new Set(['legal', 'medical', 'finance', 'coder', 'travel', 'beauty']);
+
+    if (askMatch && knownAgents.has(askMatch[1].toLowerCase())) {
+      targetAgent = askMatch[1].toLowerCase();
+      promptText = askMatch[2].trim() || 'Please analyze this image.';
+    } else if (prefixMatch && knownAgents.has(prefixMatch[1].toLowerCase())) {
+      targetAgent = prefixMatch[1].toLowerCase();
+      promptText = prefixMatch[2].trim() || 'Please analyze this image.';
+    }
+
+    const userContent = [
+      { type: 'text', text: promptText },
+      { type: 'image_url', image_url: { url: dataUrl } }
+    ];
+
+    if (targetAgent) {
+      const agentCap = targetAgent.charAt(0).toUpperCase() + targetAgent.slice(1);
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        undefined,
+        `🔍 *${agentCap}* is analyzing the image...`,
+        { parse_mode: 'Markdown' }
+      );
+      streamAgentResponse(ctx, statusMsg.message_id, userContent, targetAgent).catch(err => {
+        logger.error(`[${agentCap}] Image prompt error: ${err.message}`);
+        ctx.reply(formatApiError(err)).catch(() => { });
+      });
+    } else {
+      const stopTyping = startTyping(ctx);
+      session.resetTimer();
+      await ctx.telegram.editMessageText(
+        ctx.chat.id,
+        statusMsg.message_id,
+        undefined,
+        '🤔 Analyzing image...'
+      );
+      handleMainAgent(ctx, statusMsg.message_id, userContent, stopTyping).catch(err => {
+        logger.error(`[Main] Image prompt execution error: ${err.message}`);
+      });
+    }
+  } catch (err) {
+    logger.error(`[Bot] Error processing image: ${err.message}`);
+    await ctx.reply(`❌ Failed to process image: ${err.message}`);
+  }
+}
+
+// ─── Photo Upload Handler ───────────────────────────────────────────────────
+bot.on('photo', async (ctx) => {
+  try {
+    const photos = ctx.message.photo;
+    if (!photos || photos.length === 0) return;
+
+    // Pick highest resolution photo
+    const photo = photos[photos.length - 1];
+    logger.info(`Received photo from ${ctx.from.id} (${photo.width}x${photo.height}, ${photo.file_size || 'unknown'} bytes), caption: "${ctx.message.caption || ''}"`);
+
+    await processImageUpload(ctx, photo.file_id, ctx.message.caption, 'image/jpeg');
+  } catch (err) {
+    logger.error(`[Bot] Error in photo handler: ${err.message}`);
+    await ctx.reply(`❌ Failed to process photo: ${err.message}`);
+  }
+});
+
 // ─── Document Upload Handler ────────────────────────────────────────────────
 bot.on('document', async (ctx) => {
   try {
@@ -611,11 +740,21 @@ bot.on('document', async (ctx) => {
 
     const rawFileName = doc.file_name || 'document';
     const ext = path.extname(rawFileName).toLowerCase();
+    const imageExts = new Set(['.png', '.jpg', '.jpeg']);
+    const isImage = imageExts.has(ext) || (doc.mime_type && doc.mime_type.startsWith('image/'));
+
+    // If document is an image, process it as a conversational reference image
+    if (isImage) {
+      logger.info(`Received image document from ${ctx.from.id}: ${rawFileName} (${doc.file_size} bytes), caption: "${ctx.message.caption || ''}"`);
+      const mimeType = ext === '.png' || doc.mime_type === 'image/png' ? 'image/png' : 'image/jpeg';
+      return await processImageUpload(ctx, doc.file_id, ctx.message.caption, mimeType, rawFileName);
+    }
+
     const allowedExts = new Set(['.md', '.pdf', '.docx', '.doc', '.txt']);
 
     if (!allowedExts.has(ext)) {
       return await ctx.reply(
-        `❌ Unsupported file type (*${ext || 'unknown'}*).\nPlease send a document in *.md*, *.pdf*, or Word (*.docx*, *.doc*) format.`,
+        `❌ Unsupported file type (*${ext || 'unknown'}*).\nPlease send a document in *.md*, *.pdf*, or Word (*.docx*, *.doc*) format, or an image in *.png* / *.jpg* format.`,
         { parse_mode: 'Markdown' }
       );
     }
